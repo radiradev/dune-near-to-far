@@ -1,7 +1,10 @@
 # Near to Far Translation
 Contains utilities for making models of mapping ND depositions 
-### Notes from Oct 20th
-- Map just to `fd_nc_nu_E` this contains all hit information 
+
+### To-do list
+- [x] Map just to `fd_nc_nu_E` this contains all hit information - works well for ND Reco, not so well for `larnd-sim`
+- [ ] Map `larnd-sim` -> `sum(adc)` as a sanity check 
+- [ ] Map ND Reco to `fd_numu_lep_E` or `fd_numu_had_E` to see why mapping to `fd_numu_nu_E` wasn't working.
 - Alternatively can map to all reconstructed energies `fd_numu_nu_E`, `fd_nue_nu_E`, `fd_nc_nu_E` 
 ## Variables 
 | Far Detector                | CVN scores           | Near Detector        | ND Reco            | Global          |

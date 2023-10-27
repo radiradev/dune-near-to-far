@@ -56,32 +56,33 @@ class LarndSimConverted(torch.utils.data.Dataset):
     PIXEL_PITCH = 0.38
     def __init__(
             self,
-            root='/pscratch/sd/r/rradev/larndsim_new/train_data',
+            root='/pscratch/sd/r/rradev/near_to_far/larndsim_npz_oct27/',
             extensions='.npz',
-            augmentations=True,
+            augmentations=False,
+            targets = ['numu_score', 'nue_score', 'nutau_score', 'nc_score'],
     ):
         super().__init__()
         self.paths = glob(f'{root}/*{extensions}') # use the rest for testing
         self.augmentations = augmentations
+        self.targets = targets
         
     def loader(self, path):
         sample = np.load(path)
         coords = sample['coords']
-        
-        features = sample['adc']
+        features = sample['dQ']
         # energy = sample['energy']
 
         paired_data = sample['paired_data']
-        target = np.array([paired_data[col] for col in ['numu_score', 'nue_score', 'nutau_score', 'nc_score']])
+        target = np.array([paired_data[col] for col in [self.targets]], dtype=np.float32)
         return coords, features, target
 
 
     def preprocessing(self, sample):
         # convert to torch tensors
         coords, features,  target = sample
-        coords = torch.from_numpy(coords).float()
+        coords = torch.from_numpy(coords).float().contiguous()
         features = torch.from_numpy(features).float().unsqueeze(-1)
-        target = torch.tensor(np.array([target])).float().squeeze(-1)
+        target = torch.tensor(np.array([target])).float()
         
         if self.augmentations:
             funcs =  [drop, shift_adcs, translate] 
