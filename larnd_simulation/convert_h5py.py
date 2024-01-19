@@ -38,19 +38,19 @@ def paired_info(filepath):
         DEFAULT_FILE = "https://cernbox.cern.ch/s/3FFybAq3wsl3Irb/download"
         os.system(f"wget -O {filepath} {DEFAULT_FILE}")
 
-    flavour = ['numu_score', 'nue_score', 'nutau_score', 'nc_score']
-    proton = ['proton0_score', 'proton1_score', 'proton2_score', 'protonN_score']
-    pion = ['pion0_score', 'pion1_score', 'pion2_score', 'pionN_score']
-    pionzero = ['pionzero0_score', 'pionzero1_score', 'pionzero2_score', 'pionzeroN_score']
+    # flavour = ['numu_score', 'nue_score', 'nutau_score', 'nc_score']
+    # proton = ['proton0_score', 'proton1_score', 'proton2_score', 'protonN_score']
+    # pion = ['pion0_score', 'pion1_score', 'pion2_score', 'pionN_score']
+    # pionzero = ['pionzero0_score', 'pionzero1_score', 'pionzero2_score', 'pionzeroN_score']
 
-    numu_energy_cols = ['numu_nu_E', 'numu_lep_E', 'numu_had_E']
-    nue_energy_cols = ['nue_nu_E', 'nue_lep_E', 'nue_had_E']
-    nc_energy_cols = ['nc_nu_E', 'nc_lep_E', 'nc_had_E']
-    identifiers = ['run', 'eventID']
-    vertex = ['vtxX', 'vtxY', 'vtxZ']
+    # numu_energy_cols = ['numu_nu_E', 'numu_lep_E', 'numu_had_E']
+    # nue_energy_cols = ['nue_nu_E', 'nue_lep_E', 'nue_had_E']
+    # nc_energy_cols = ['nc_nu_E', 'nc_lep_E', 'nc_had_E']
+    # identifiers = ['run', 'eventID']
+    # vertex = ['vtxX', 'vtxY', 'vtxZ']
     with uproot.open(filepath) as file:
         tree = file['nd_fd_reco']
-        array = tree.arrays(flavour + proton + pion + pionzero + numu_energy_cols + nue_energy_cols + nc_energy_cols + identifiers + vertex)
+        array = tree.arrays()
         return array
 
 
@@ -192,10 +192,8 @@ def process_run(run_id):
 paired = paired_info('/pscratch/sd/r/rradev/near_to_far/paired_ndfd.root')
 unique_run_ids = np.unique(paired['run'])
 eventIDs = paired['eventID']
+process_map(process_run, unique_run_ids, max_workers=128)
 
-print(paired.keys())
-# process_map(process_run, unique_run_ids, max_workers=128)
-
-# plot_one_file()
+plot_one_file()
 
 

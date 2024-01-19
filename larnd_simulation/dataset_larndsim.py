@@ -74,6 +74,7 @@ class LarndSimConverted(torch.utils.data.Dataset):
 
         paired_data = sample['paired_data']
         target = np.array([paired_data[col] for col in [self.targets]], dtype=np.float32)
+        # target = np.sum(sample['dQ'])
         return coords, features, target
 
 

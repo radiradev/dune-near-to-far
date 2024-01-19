@@ -38,6 +38,11 @@ class LarndSimWrapper(pl.LightningModule):
             predictions = F.log_softmax(predictions, dim=1)
             labels = torch.log(labels)
 
+        elif self.model_task == 'adc_regression':
+            labels = labels
+        else:
+            raise ValueError(f"Unknown model task {self.model_task}")
+
         loss = self.loss(predictions, labels)
         return loss, predictions, labels
     

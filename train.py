@@ -16,7 +16,7 @@ wandb_mode = "online"
 wandb.init(mode=wandb_mode)
 
 # This should be passed from the script that calls this file
-targets = ['nc_nu_E']
+targets = ['Ev_reco']
 dataset = LarndSimConverted(targets=targets)
 test_len = int(0.2 * len(dataset))
 lengths = [len(dataset) - test_len, test_len]
@@ -30,7 +30,7 @@ num_of_gpus = torch.cuda.device_count()
 assert num_of_gpus > 0, "This code must be run with at least one GPU"
 
 
-wandb_logger = WandbLogger(project='3d_to_fd_vars', log_model=all, offline=False)
+wandb_logger = WandbLogger(name='sum_adc', project='3d_to_fd_vars', log_model=all, offline=False)
 print(wandb_logger.experiment.dir)
 checkpoint_callback = pl.callbacks.ModelCheckpoint(
     dirpath=str(wandb_logger.experiment.dir),
