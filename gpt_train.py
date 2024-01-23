@@ -7,7 +7,7 @@ import sys
 import torch
 from torch.utils.data.dataloader import DataLoader
 
-
+import numpy as np
 from gpt.dataset import PairedData
 from gpt.model import GPT
 from gpt.trainer import Trainer
@@ -38,16 +38,15 @@ eval_iters = 20
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 @torch.no_grad()
-def estimate_loss(val_iter):
+def estimate_loss(val_loader):
     model.eval()
-    losses = torch.zeros(eval_iters)
-    for k in range(eval_iters):
-        batch = next(val_iter)
+    losses = []
+    for batch in (val_loader):
         batch = [t.to(device) for t in batch]
         x, y = batch
         logits, loss = model(x, y)
-        losses[k] = loss.item()
-    loss = losses.mean()
+        losses.append(loss.item())
+    loss = np.stack(losses).mean()
     model.train()
     return loss
 
@@ -70,14 +69,19 @@ if __name__ == '__main__':
             batch_size=512,
             num_workers=4
         )
-    val_iter = iter(val_loader)
     # construct the model
     # config.model.vocab_size = train_dataset.get_vocab_size()
     config.model.block_size = train_dataset.get_block_size()
+    config.model.far_reco_size = train_dataset.get_far_reco_length()
+    config.model.scores_size = train_dataset.get_scores_length()
+    
     model = GPT(config.model)
 
     # construct the trainer object
     trainer = Trainer(config.trainer, model, train_dataset)
+    
+    global best_val_loss
+    best_val_loss = 1000 
     # iteration callback
     def batch_end_callback(trainer):
         global best_val_loss
@@ -85,13 +89,13 @@ if __name__ == '__main__':
         if trainer.iter_num % 10 == 0:
             print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f}")
 
-        if trainer.iter_num % 500 == 0:
+        if trainer.iter_num % 250 == 0:
             # evaluate both the train and test score
 
             print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f}")
             model.eval()
             with torch.no_grad():   
-                val_loss = estimate_loss(val_iter)
+                val_loss = estimate_loss(val_loader)
                 print("Validation Loss:", val_loss)
 
             # save the latest model

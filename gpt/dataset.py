@@ -2,6 +2,7 @@ import torch
 import uproot
 import numpy as np
 
+from sklearn.preprocessing import PowerTransformer, QuantileTransformer
 from torch.utils.data import Dataset
 
 class PairedData(Dataset):
@@ -22,59 +23,63 @@ class PairedData(Dataset):
             near_reco = [
                 'eRecoP', 'eRecoN', 'eRecoPip', 
                 'eRecoPim', 'eRecoPi0', 'eRecoOther', 
-                'Ev_reco', 'Elep_reco', 'theta_reco'
+                'Ev_reco', 'Elep_reco', 'theta_reco',
+                'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg'
             ]
 
         if far_reco is None:
-            far_reco = [
-                'nue_nu_E',
-                'numu_nu_E',
-                'nc_nu_E',
-            ]
-    
+            cvn_scores = ['numu_score', 'nue_score', 'nc_score', 'nutau_score']
+            far_reco = ['nc_nu_E', 'numu_nu_E', 'nue_nu_E']
+        
+        self.cvn_scores = cvn_scores
         self.near_reco = near_reco
         self.far_reco = far_reco
-
         self.data = self.load_data()
-        self.block_size = len(near_reco) + len(far_reco) + 1 
+
+        self.block_size = len(near_reco) + len(far_reco) + len(cvn_scores) + 1 
 
     def load_data(self):
         tree = uproot.open(self.data_path)['nd_fd_reco']
 
         near_det = tree.arrays(self.near_reco, library='pd').to_numpy()
+        cvn_scores = tree.arrays(self.cvn_scores, library='pd').to_numpy()
         far_det = tree.arrays(self.far_reco, library='pd').to_numpy()
+        # find rows where the energy is 0
+        row_mask = far_det[:, 0] != 0
         
-        data = np.concatenate((near_det, far_det), axis=1)
-        
-        samples_in_train = 45_000
+        data = np.concatenate((near_det, cvn_scores, far_det), axis=1)
+        data = data[row_mask]
+        samples_in_train = 70_000
        
         if self.train:
-            self.near_data = np.log1p(near_det[:samples_in_train])
-            self.far_data = np.log1p(far_det[:samples_in_train])
+            self.near_data = near_det[:samples_in_train]
+            self.far_data = far_det[:samples_in_train]
             data = data[:samples_in_train]
         
         else:
-            self.near_data = np.log1p(near_det[samples_in_train:])
-            self.far_data = np.log1p(far_det[samples_in_train:])
+            self.near_data = near_det[samples_in_train:]
+            self.far_data =  far_det[samples_in_train:]
             data = data[samples_in_train:]
-            
-        return np.log1p(data)
+
+        return data
+
+    def get_scores_length(self):
+        return len(self.cvn_scores)
+    
+    def get_far_reco_length(self):
+        return len(self.far_reco)
 
     def get_block_size(self):
         return self.block_size
 
     def __len__(self):
-        return len(self.data) - self.block_size
+        return len(self.near_data) - self.block_size
 
     def __getitem__(self, idx):
-        sample = self.data[idx]
-        
-        # return as tensors
-        x = torch.tensor(sample[:-1], dtype=torch.float)
-        y = torch.tensor(sample[1:], dtype=torch.float)
-        y[:len(self.near_reco) - 1] = -1 #only compute loss far det
+        sample = torch.tensor(self.data[idx], dtype=torch.float)
+        return sample[:-1], sample[len(self.near_reco):]
+    
 
-        return x, y
 
 
 # if name main

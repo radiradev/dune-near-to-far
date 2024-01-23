@@ -26,11 +26,19 @@ class PairedData(Dataset):
             ]
 
         if far_reco is None:
-            far_reco = [
-                'nue_nu_E',
-                'numu_nu_E',
-                'nc_nu_E',
-            ]
+            # far_reco = [
+            #     # 'nc_lep_E',
+            #     # 'nc_had_E',
+            #     'nc_nu_E',
+            #     'numu_lep_E',
+            #     'numu_had_E',
+            #     'numu_nu_E',
+            #     'nue_lep_E',
+            #     'nue_had_E,
+            #     'nue_nu_E',
+            # ]
+            far_reco = ['nc_lep_E', 'nc_had_E', 'nc_nu_E', 'numu_lep_E', 'numu_had_E', 'numu_nu_E', 'nue_lep_E', 'nue_had_E', 'nue_nu_E']
+            
     
         self.near_reco = near_reco
         self.far_reco = far_reco
@@ -41,17 +49,21 @@ class PairedData(Dataset):
     def load_data(self):
         tree = uproot.open(self.data_path)['nd_fd_reco']
 
-        near_det = tree.arrays(self.near_reco, library='pd')
-        far_det = tree.arrays(self.far_reco, library='pd')
+        near_det = tree.arrays(self.near_reco, library='pd').to_numpy()
+        far_det = tree.arrays(self.far_reco, library='pd').to_numpy()
         
-        data = np.concatenate((near_det.to_numpy(), far_det.to_numpy()), axis=1)
+        data = np.concatenate((near_det, far_det), axis=1)
         
-        samples_in_train = 45_000
+        samples_in_train = 70_000
        
         if self.train:
+            self.near_data = np.log1p(near_det[:samples_in_train])
+            self.far_data = np.log1p(far_det[:samples_in_train])
             data = data[:samples_in_train]
         
         else:
+            self.near_data = np.log1p(near_det[samples_in_train:])
+            self.far_data = np.log1p(far_det[samples_in_train:])
             data = data[samples_in_train:]
             
         return np.log1p(data)

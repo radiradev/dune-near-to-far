@@ -11,6 +11,8 @@
         "n_gaussians": 42,
         "vocab_size": null,
         "block_size": null,
+        "scores_size": null,
+        "far_reco_size": null,
         "embd_pdrop": 0.0,
         "resid_pdrop": 0.1,
         "attn_pdrop": 0.1

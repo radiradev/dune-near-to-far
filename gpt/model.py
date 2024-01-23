@@ -107,6 +107,8 @@ class GPT(nn.Module):
         C.n_gaussians = 42
         C.vocab_size = None
         C.block_size = None
+        C.scores_size = None
+        C.far_reco_size = None
         # dropout hyperparameters
         C.embd_pdrop = 0.0
         C.resid_pdrop = 0.1
@@ -116,8 +118,11 @@ class GPT(nn.Module):
     def __init__(self, config):
         super().__init__()
         # assert config.vocab_size is not None
-        assert config.block_size is not None
+        assert config.block_size is not None and config.scores_size is not None and config.far_reco_size is not None
         self.block_size = config.block_size
+        self.scores_size = config.scores_size
+        self.far_reco_size = config.far_reco_size
+
 
         type_given = config.model_type is not None
         params_given = all([config.n_layer is not None, config.n_head is not None, config.n_embd is not None])
@@ -236,18 +241,28 @@ class GPT(nn.Module):
 
         x = self.transformer.ln_f(x)
         output = self.lm_head(x) # (batch_size, n_objects, 3*n_gaussians)
-
+        not_near = self.scores_size + self.far_reco_size 
+        output = output[:, -not_near:, :] #get rid of all tokens that correspond to near detector
         batch_size, n_objects, n_gaussians = output.shape
+        # this is a huge mess 
         output = output.reshape(batch_size, n_objects, int(n_gaussians/3), 3)
-        gaussian_mixture = self.compute_mixture(output)
+        scores_output = output[:, :self.scores_size, :, :]
+        far_reco_output = output[:, self.scores_size:, :, :]
+
+        #split between scores and far_reco
+
+        scores_mixture = self.compute_mixture(scores_output, transform=True)
+        far_reco_mixture = self.compute_mixture(far_reco_output)
 
         if targets is not None:
-            loss = -gaussian_mixture.log_prob(targets).mean()
+            scores_loss = -scores_mixture.log_prob(targets[:, :self.scores_size]).mean()
+            far_reco_loss = -far_reco_mixture.log_prob(targets[:, self.scores_size:]).mean()
+            loss = scores_loss + far_reco_loss
             return output, loss
         
         return output
 
-    def compute_mixture(self, output):
+    def compute_mixture(self, output, transform=False):
         mu = output[...,0]
         sigma = torch.exp(output[...,1]) # sigma>0 #paper givt uses softplus
         weights = torch.nn.functional.softmax(output[...,2], dim=-1) # normalize weights
@@ -257,7 +272,10 @@ class GPT(nn.Module):
 
         # sample from the mixture component
         components = torch.distributions.Normal(mu, sigma)
-
+        if transform:
+            components = torch.distributions.TransformedDistribution(components, torch.distributions.transforms.SigmoidTransform())
+        else:
+            components = torch.distributions.TransformedDistribution(components, torch.distributions.transforms.ExpTransform())
         # construct the gaussian mixture distribution
         return torch.distributions.MixtureSameFamily(mixture, components)
 
@@ -288,12 +306,19 @@ class GPT(nn.Module):
         start_dim = idx.shape[1]
         x = idx
 
+        inner_idx = 0
         for i in range(start_dim, num_dims):
+            
             output = self.forward(x)
             output = output[:,-1, :, :].unsqueeze(1)
-            gaussian_mixture = self.compute_mixture(output)
+            transform = False
+            if inner_idx <= self.scores_size - 1:
+                transform = True # first 4 dimensions are scores
+            gaussian_mixture = self.compute_mixture(output, transform=transform)
             
             x_next = gaussian_mixture.sample()
             x = torch.cat((x, x_next), dim=1)
+
+            inner_idx += 1
 
         return x

@@ -22,15 +22,16 @@ regressor = LGBMRegressor(boosting_type='gbdt', verbose=3)
 near_det = [
     'eRecoP', 'eRecoN', 'eRecoPip', 
     'eRecoPim', 'eRecoPi0', 'eRecoOther', 
-    'Ev_reco', 'Elep_reco', 'theta_reco'
+    'Ev_reco', 'Elep_reco', 'theta_reco',
+    # 'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg'
 ]
 
 far_det = [
-    'nc_nu_E',
+    'numu_nu_E',
 ]
 
 input, target = load_data(data_path, near_variables=near_det, far_variables=far_det)
-target = np.log(np.clip(target, 0.03, None))
+target = np.log1p(target)
 X_train, X_test, y_train, y_test = train_test_split(input, target, test_size=0.2, random_state=42)
 regressor.fit(X_train, y_train)
 # save the model to disk
@@ -40,7 +41,7 @@ pickle.dump(regressor, open(filename, 'wb'))
 # evaluate the model
 y_pred = regressor.predict(X_test)
 print("MSE in log space:", mean_squared_error(y_test, y_pred))
-print("MSE in linear space:", mean_squared_error(np.exp(y_test), np.exp(y_pred)))
+print("MSE in linear space:", mean_squared_error(np.expm1(y_test), np.expm1(y_pred)))
 
 plt.rcParams['figure.figsize'] = [12, 6]
 fig, axs = plt.subplots(1, 2)
@@ -48,7 +49,7 @@ fig, axs = plt.subplots(1, 2)
 y_test = y_test.to_numpy().flatten()
 error = y_pred - y_test
 
-axs[0].hist(error, bins=100, range=(-2, 2))
+axs[0].hist(error, bins=100, range=(0, 2))
 axs[0].set_title('Prediction Error log(energy)')
 axs[0].set_xlabel('(True - Predicted)')
 
@@ -65,8 +66,8 @@ plt.savefig('lgbm_error.png')
 
 plt.clf()
 plt.rcParams['figure.figsize'] = [8, 6]
-plt.hist(y_pred, bins=30, label='Predicted', histtype='step', linewidth=2, density=True, range=(-3, 3));
-plt.hist(y_test, bins=30, label='True', histtype='step', linewidth=2, density=True, range=(-3, 3), color='tab:red');
+plt.hist(y_pred, bins=30, label='Predicted', histtype='step', linewidth=2, density=True, range=(-0.5, 4));
+plt.hist(y_test, bins=30, label='True', histtype='step', linewidth=2, density=True, range=(-0.5, 4), color='tab:red');
 plt.xlabel('Log Energy')
 plt.ylabel('Count')
 plt.legend()
