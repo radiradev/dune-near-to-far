@@ -4,6 +4,10 @@ Contains utilities for making models of mapping ND Reco/Deposition to FD Reco.
 ## Transformer
 A generative transformer now is working very well mapping between ND and FD reco.
 
+### To do for transformer
+- [ ] - Look at wrongly identified events, i.e events where the true FD reco does not match the truth and how does this affect the transformer when the event is sampled repeadetly.
+ - [ ] - Force the transformer to predict FD reco deterministically, i.e force the temperature to 0.
+
 ## Variables 
 | Far Detector                | CVN scores           | Near Detector        | ND Reco            | Global          |
 |-----------------------------|----------------------|----------------------|--------------------|-----------------|
