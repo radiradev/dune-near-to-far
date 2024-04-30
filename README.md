@@ -5,12 +5,17 @@ $$p(x_{FD} | x_{ND})$$
 We learn this autoregressively, i.e the transformer is trained to predict:
 $$p(x_{FD} | x_{ND}) = \prod_i p(x_{i_{FD}}| x_{1_{FD}}, x_{2_{FD}}, ..., x_{i-1_{FD}}, x_{ND}) $$
 
+We learn each `fd` dimension as Gaussian Mixture distribution that has been changed in some way. 
+For the CVN scores we transform the distribution using a sigmoid to ensure it stays within the range $[0, 1]$ and for the `fd` energies we transform them using the exponential to ensure that the distribution is strictly positive and a with a tail.
+
 ## Usage
-Change the `data_path` in `NewPairedData` in the `gpt.dataset.py` script (see how to download the dataset below)
+ - Generate Data (see Paired Dataset section)
 
-Train using `python3 gpt_train.py`. 
+ - Change the `data_path` in `NewPairedData` in the `gpt.dataset.py` script (see how to download the dataset below)
 
-Then use the `gpt_sample.ipynb` notebook to generate new events and make plots.
+ - Train using `python3 gpt_train.py`. 
+
+ - Then use the `gpt_sample.ipynb` notebook to generate new events and make plots.
 
 ## Requirements
 Requires an installation of `torch`.
