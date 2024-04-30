@@ -8,7 +8,7 @@ import torch
 from torch.utils.data.dataloader import DataLoader
 
 import numpy as np
-from gpt.dataset import PairedData
+from gpt.dataset import PairedData, NewPairedData
 from gpt.model import GPT
 from gpt.trainer import Trainer
 from gpt.utils import set_seed, setup_logging, CfgNode as CN
@@ -22,7 +22,7 @@ def get_config():
     # system
     C.system = CN()
     C.system.seed = 3407
-    C.system.work_dir = './out/gpt_nd2fd'
+    C.system.work_dir = './out/new_data'
 
     # model
     C.model = GPT.get_default_config()
@@ -60,8 +60,8 @@ if __name__ == '__main__':
     setup_logging(config)
     set_seed(config.system.seed)
 
-    train_dataset = PairedData()
-    val_dataset = PairedData(train=False)
+    train_dataset = NewPairedData(train=True)
+    val_dataset = NewPairedData(train=False)
     val_loader = DataLoader(
             val_dataset,
             shuffle=False,
@@ -89,7 +89,7 @@ if __name__ == '__main__':
         if trainer.iter_num % 10 == 0:
             print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f}")
 
-        if trainer.iter_num % 250 == 0:
+        if trainer.iter_num % 300 == 0:
             # evaluate both the train and test score
 
             print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f}")

@@ -4,6 +4,73 @@ import numpy as np
 
 from sklearn.preprocessing import PowerTransformer, QuantileTransformer
 from torch.utils.data import Dataset
+import pandas as pd
+
+
+class NewPairedData(Dataset):
+    """
+    Paired data for training the GPT model
+    """
+    def __init__(self, 
+                 data_path='/global/cfs/cdirs/dune/users/rradev/near_to_far/paired_data_cuts.csv', 
+                 near_reco=None, 
+                 far_reco=None,
+                 train=True):
+        
+        super().__init__()
+        self.data_path = data_path
+        self.train = train
+       
+        if near_reco is None:
+            near_reco = [
+                'eRecoP', 'eRecoN', 'eRecoPip', 
+                'eRecoPim', 'eRecoPi0', 'eRecoOther', 
+                'Ev_reco', 'Elep_reco', 'theta_reco',
+                'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
+            ]
+
+        if far_reco is None:
+            cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
+            far_reco = ['fd_nue_lep_E', 'fd_numu_lep_E', 'fd_numu_nu_E', 'fd_nue_nu_E']
+        
+        self.cvn_scores = cvn_scores
+        self.near_reco = near_reco
+        self.far_reco = far_reco
+        self.data = self.load_data()
+
+        self.block_size = len(near_reco) + len(cvn_scores) + len(far_reco) + 1 
+
+    def load_data(self):
+        df = pd.read_csv(self.data_path)
+        # load in the near reco and far reco columsn
+
+        df = df[self.near_reco + self.cvn_scores + self.far_reco]
+        data = df.to_numpy().astype(np.float32)
+        samples_in_train = 70_000
+       
+        if self.train:
+            data = data[:samples_in_train]
+        else:
+            data = data[samples_in_train:]
+
+        return data
+
+    def get_scores_length(self):
+        return len(self.cvn_scores)
+    
+    def get_far_reco_length(self):
+        return len(self.far_reco)
+
+    def get_block_size(self):
+        return self.block_size
+
+    def __len__(self):
+        return len(self.data) - self.block_size
+
+    def __getitem__(self, idx):
+        sample = torch.tensor(self.data[idx], dtype=torch.float)
+        return sample[:-1], sample[len(self.near_reco):]
+
 
 class PairedData(Dataset):
     """
@@ -73,7 +140,7 @@ class PairedData(Dataset):
         return self.block_size
 
     def __len__(self):
-        return len(self.near_data) - self.block_size
+        return len(self.data) - self.block_size
 
     def __getitem__(self, idx):
         sample = torch.tensor(self.data[idx], dtype=torch.float)

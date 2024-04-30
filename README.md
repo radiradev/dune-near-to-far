@@ -1,12 +1,25 @@
 # Near to Far Translation
-Contains utilities for making models of mapping ND Reco/Deposition to FD Reco.
+A generative model based on [min-gpt](https://github.com/karpathy/minGPT). It learns the conditional distribution over the `fd` recontructed variables given `nd` reconstructed variables:
+$$p(x_{FD} | x_{ND})$$
 
-## Transformer
-A generative transformer now is working very well mapping between ND and FD reco.
+We learn this autoregressively, i.e the transformer is trained to predict:
+$$p(x_{FD} | x_{ND}) = \prod_i p(x_{i_{FD}}| x_{1_{FD}}, x_{2_{FD}}, ..., x_{3_{FD}}, x_{ND}) $$
 
-### To do for transformer
-- [ ] - Look at wrongly identified events, i.e events where the true FD reco does not match the truth and how does this affect the transformer when the event is sampled repeadetly.
- - [ ] - Force the transformer to predict FD reco deterministically, i.e force the temperature to 0.
+## Usage
+Change the `data_path` in `NewPairedData` in the `gpt.dataset.py` script.
+
+Train using `python3 gpt_train.py`. 
+
+Then use the `gpt_sample.ipynb` notebook to generate new events and make plots.
+
+## Requirements
+Requires an installation of `torch`.
+
+## TO-dos
+[ ] - Fix issue with  `best_val_loss` getting overriden at every evaluation in `gpt_train.py`.
+
+[ ] - Explore other generative models. Any conditional generative models should work (diffusion, normalising flows, GANs)
+
 
 ## Variables 
 | Far Detector                | CVN scores           | Near Detector        | ND Reco            | Global          |
@@ -62,3 +75,6 @@ A generative transformer now is working very well mapping between ND and FD reco
 - [ ] Map `larndsim` -> `near Ev_reco` seems to not work very well
 - [ ] Map ND Reco to `fd_numu_lep_E` or `fd_numu_had_E` to see why mapping to `fd_numu_nu_E` wasn't working.
 - [ ] Plot adc sum vs `fc_nc_nu_E`
+
+
+
