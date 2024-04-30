@@ -4,8 +4,9 @@ $$p(x_{FD} | x_{ND})$$
 
 We learn this autoregressively, i.e the transformer is trained to predict:
 $$p(x_{FD} | x_{ND}) = \prod_i p(x_{i_{FD}}| x_{1_{FD}}, x_{2_{FD}}, ..., x_{i-1_{FD}}, x_{ND}) $$
+
 ## Usage
-Change the `data_path` in `NewPairedData` in the `gpt.dataset.py` script.
+Change the `data_path` in `NewPairedData` in the `gpt.dataset.py` script (see how to download the dataset below)
 
 Train using `python3 gpt_train.py`. 
 
@@ -21,6 +22,13 @@ Requires an installation of `torch`.
 
 - [ ] - Explore other generative models. Any conditional generative models should work (diffusion, normalising flows, GANs)
 
+
+## Paired Dataset
+Download the dataset from [CERNBOX](https://cernbox.cern.ch/s/VL2wOEViP6QTXvv). Then use the provided script to apply cuts to the data. 
+```
+python3 scripts/cut.py /your/path/here/to/new_paired.h5
+```
+This will create a `paired_data_cuts.csv` file in the same directory as the `.h5` file.
 
 ## Variables 
 | Far Detector                | CVN scores           | Near Detector        | ND Reco            | Global          |
