@@ -3,7 +3,7 @@ A generative model based on [min-gpt](https://github.com/karpathy/minGPT). It le
 $$p(x_{FD} | x_{ND})$$
 
 We learn this autoregressively, i.e the transformer is trained to predict:
-$$p(x_{FD} | x_{ND}) = \prod_i p(x_{i_{FD}}| x_{1_{FD}}, x_{2_{FD}}, ..., x_{3_{FD}}, x_{ND}) $$
+$$p(x_{FD} | x_{ND}) = \prod_i p(x_{i_{FD}}| x_{1_{FD}}, x_{2_{FD}}, ..., x_{i-1_{FD}}, x_{ND}) $$
 ## Usage
 Change the `data_path` in `NewPairedData` in the `gpt.dataset.py` script.
 
