@@ -17,9 +17,11 @@ For the CVN scores we transform the distribution using a sigmoid to ensure it st
 
  - Then use the `gpt_sample.ipynb` notebook to generate new events and make plots.
 
-## Requirements
-Requires an installation of `torch`.
+## Software Requirements
+wtih `pip` (also possible with conda):
 
+`pip install -r requirements.txt`
+ 
 ## TO-dos and Issues
 - [ ] - Generation is not very stable - sometimes creates values outside of the required range for scores and energies.
 
