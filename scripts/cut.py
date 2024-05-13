@@ -26,6 +26,7 @@ def convert_to_df(file):
         data = file[key]
         nd_df = _convert_to_df(data['nd_paramreco'])
         fd_df = _convert_to_df(data['fd_reco'])
+        fd_vertices = _convert_to_df(data['fd_vertices'])
 
         run_id = extract_run_id(key)
         assert len(nd_df) == len(fd_df), f'Length mismatch for {key}'
@@ -33,7 +34,9 @@ def convert_to_df(file):
         # joint the two dataframes
         # add fd prefix to the columns corresponding to FD vars
         fd_df.columns = ['fd_' + col for col in fd_df.columns]
-        df = pd.concat([nd_df, fd_df], axis=1)
+        fd_vertices.columns = ['fd_' + col for col in fd_vertices.columns]
+
+        df = pd.concat([nd_df, fd_df, fd_vertices], axis=1)
         df['run_id'] = run_id
 
         # create a unique ID for each event
@@ -70,13 +73,13 @@ def main(datadir: str):
     Usage:
     python3 cut.py <datadir>
 
-    This script reads a HDF5 file named 'new_paired.h5' located in the specified `datadir` directory.
+    This script reads a HDF5 file named 'FHC.1000000-1005000.noFDhadsel.ndfd_reco_only.h5' located in the specified `datadir` directory.
     It converts the data from the HDF5 file into a pandas DataFrame using the `convert_to_df` function.
     Then, it applies cuts to the DataFrame using the `apply_cuts` function.
     Finally, it saves the resulting DataFrame as a CSV file named 'paired_data_cuts.csv' in the `datadir` directory.
     """
 
-    filename = 'new_paired.h5'
+    filename = 'FHC.1000000-1005000.noFDhadsel.ndfd_reco_only.h5'
     file = h5py.File(os.path.join(datadir, filename), 'r')
     df = convert_to_df(file)
     df = apply_cuts(df)
@@ -84,7 +87,7 @@ def main(datadir: str):
     df = clip_leptonic(df)
 
 
-    df.to_csv(os.path.join(datadir, 'paired_data_cuts.csv'), index=False)
+    df.to_csv(os.path.join(datadir, 'ndfd_reco_only_cuts.noFDhasel.csv'), index=False)
     print(f"Processed data saved to {os.path.join(datadir, 'paired_data_cuts.csv')}")
     print(f"Number of events after applying cuts: {len(df)}")
 
