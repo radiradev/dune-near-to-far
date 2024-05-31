@@ -12,7 +12,7 @@ class NewPairedData(Dataset):
     Paired data for training the GPT model
     """
     def __init__(self, 
-                 data_path='/global/cfs/cdirs/dune/users/rradev/near_to_far/paired_data_cuts.csv', 
+                 data_path='data/ndfd_reco_only_cuts.noFDhasel_oldg4params.csv', 
                  near_reco=None, 
                  far_reco=None,
                  train=True):
@@ -27,6 +27,7 @@ class NewPairedData(Dataset):
                 'eRecoPim', 'eRecoPi0', 'eRecoOther', 
                 'Ev_reco', 'Elep_reco', 'theta_reco',
                 'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
+                'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             ]
 
         if far_reco is None:

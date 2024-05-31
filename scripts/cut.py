@@ -73,13 +73,13 @@ def main(datadir: str):
     Usage:
     python3 cut.py <datadir>
 
-    This script reads a HDF5 file named 'FHC.1000000-1005000.noFDhadsel.ndfd_reco_only.h5' located in the specified `datadir` directory.
+    This script reads a HDF5 file named 'FHC.1000000-1005000.noFDhadsel_oldg4params.ndfd_reco_only.h5' located in the specified `datadir` directory.
     It converts the data from the HDF5 file into a pandas DataFrame using the `convert_to_df` function.
     Then, it applies cuts to the DataFrame using the `apply_cuts` function.
     Finally, it saves the resulting DataFrame as a CSV file named 'paired_data_cuts.csv' in the `datadir` directory.
     """
 
-    filename = 'FHC.1000000-1005000.noFDhadsel.ndfd_reco_only.h5'
+    filename = 'FHC.1000000-1005000.noFDhadsel_oldg4params.ndfd_reco_only.h5'
     file = h5py.File(os.path.join(datadir, filename), 'r')
     df = convert_to_df(file)
     df = apply_cuts(df)
@@ -87,7 +87,7 @@ def main(datadir: str):
     df = clip_leptonic(df)
 
 
-    df.to_csv(os.path.join(datadir, 'ndfd_reco_only_cuts.noFDhasel.csv'), index=False)
+    df.to_csv(os.path.join(datadir, 'ndfd_reco_only_cuts.noFDhasel_oldg4params.csv'), index=False)
     print(f"Processed data saved to {os.path.join(datadir, 'paired_data_cuts.csv')}")
     print(f"Number of events after applying cuts: {len(df)}")
 
