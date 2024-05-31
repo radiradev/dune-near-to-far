@@ -17,6 +17,10 @@ For the CVN scores we transform the distribution using a sigmoid to ensure it st
 
  - Then use the `gpt_sample.ipynb` notebook to generate new events and make plots.
 
+## Vertices
+Vertices from the training data in `data/train_vertices.npy` in shape `n_samples, 3`
+The columns are in order `x, y, z`.
+
 ## Software Requirements
 wtih `pip` (also possible with conda):
 
