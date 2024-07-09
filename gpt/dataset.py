@@ -1,8 +1,6 @@
 import torch
 import uproot
 import numpy as np
-
-from sklearn.preprocessing import PowerTransformer, QuantileTransformer
 from torch.utils.data import Dataset
 import pandas as pd
 
@@ -31,8 +29,9 @@ class NewPairedData(Dataset):
             ]
 
         if far_reco is None:
-            cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
-            far_reco = ['fd_nue_lep_E', 'fd_numu_lep_E', 'fd_numu_nu_E', 'fd_nue_nu_E']
+            
+            cvn_scores = ['fd_numu_score']#, 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
+            far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E'] #,'fd_nue_lep_E', 'fd_numu_nu_E', 'fd_nue_nu_E']
         
         self.cvn_scores = cvn_scores
         self.near_reco = near_reco
@@ -92,7 +91,7 @@ class PairedData(Dataset):
                 'eRecoP', 'eRecoN', 'eRecoPip', 
                 'eRecoPim', 'eRecoPi0', 'eRecoOther', 
                 'Ev_reco', 'Elep_reco', 'theta_reco',
-                'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg'
+                'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
             ]
 
         if far_reco is None:
