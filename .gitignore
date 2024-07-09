@@ -5,3 +5,8 @@
 */.vscode
 
 /notebooks
+
+*.pyc
+*.pyo
+# ignore pycache
+gpt/__pycache__/

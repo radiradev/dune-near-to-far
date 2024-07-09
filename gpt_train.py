@@ -22,7 +22,7 @@ def get_config():
     # system
     C.system = CN()
     C.system.seed = 3407
-    C.system.work_dir = './out/may31_oldg4params'
+    C.system.work_dir = './out/jul9_fix_oldg4params'
 
     # model
     C.model = GPT.get_default_config()

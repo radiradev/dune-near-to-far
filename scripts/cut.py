@@ -63,6 +63,12 @@ def clip_leptonic(df):
         df[col] = df[col].clip(1e-2, None)
     return df
 
+def clip_hadronic(df):
+    hadronic_cols = ['fd_nue_had_E', 'fd_numu_had_E']
+    for col in hadronic_cols:
+        df[col] = df[col].clip(1e-2, None)
+    return df
+
 def main(datadir: str):
     """
     Perform data processing and apply cuts to the paired data.
@@ -84,6 +90,7 @@ def main(datadir: str):
     df = convert_to_df(file)
     df = apply_cuts(df)
     df = drop_negative_scores(df)
+    df = clip_hadronic(df)
     df = clip_leptonic(df)
 
 
