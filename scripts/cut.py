@@ -53,7 +53,7 @@ def drop_negative_scores(df):
 
 def apply_cuts(df):
     #muon_{contained| tracker | ecal} == 1 & reco_numu == 1 & Ehad_veto > 30
-    cuts = ((df['muon_contained'] == 1) | (df['muon_tracker'] == 1) | (df['muon_ecal'] == 1)) & (df['reco_numu'] == 1) & (df['Ehad_veto'] > 30)
+    cuts = ((df['muon_contained'] == 1) | (df['muon_tracker'] == 1)) & (df['reco_numu'] == 1) & (df['Ehad_veto'] < 30)
     return df[cuts]
 
 def clip_leptonic(df):
