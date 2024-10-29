@@ -122,7 +122,6 @@ if __name__ == '__main__':
             with torch.no_grad():   
                 val_loss = estimate_loss(val_loader)
                 print("Validation Loss:", val_loss)
-            print(val_loss, best_val_loss)
 
             # save the latest model
             if val_loss < best_val_loss:
