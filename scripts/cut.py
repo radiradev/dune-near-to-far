@@ -70,34 +70,35 @@ def clip_hadronic(df):
     return df
 
 def main(
-    datadir: str, filename: str='FHC.1000000-1005000.noFDhadsel_oldg4params.ndfd_reco_only.h5'
+    datadir: str,
+    in_fname: str='FHC.1000000-1005000.noFDhadsel_oldg4params.ndfd_reco_only.h5',
+    out_fname: str='ndfd_reco_only_cuts.noFDhasel_oldg4params.csv'
 ):
     """
     Perform data processing and apply cuts to the paired data.
 
     Parameters:
     - datadir (str): The directory path where the data files are located.
-    - filename (str): The=
+    - in_fname (str): The input file name 
+    - out_fname (str): The output file name
 
     Usage:
-    python3 cut.py [ --filename filename ] <datadir>
+    python3 cut.py [ --in_fname in_fname ] [ --out_fname out_fname ] <datadir>
 
     This script reads a HDF5 file located in the specified `datadir` directory.
     It converts the data from the HDF5 file into a pandas DataFrame using the `convert_to_df` function.
     Then, it applies cuts to the DataFrame using the `apply_cuts` function.
-    Finally, it saves the resulting DataFrame as a CSV file named 'paired_data_cuts.csv' in the `datadir` directory.
+    Finally, it saves the resulting DataFrame as a CSV file named `out_fname` in the `datadir` directory.
     """
-
-    file = h5py.File(os.path.join(datadir, filename), 'r')
+    file = h5py.File(os.path.join(datadir, in_fname), 'r')
     df = convert_to_df(file)
     df = apply_cuts(df)
     df = drop_negative_scores(df)
     df = clip_hadronic(df)
     df = clip_leptonic(df)
 
-
-    df.to_csv(os.path.join(datadir, 'ndfd_reco_only_cuts.noFDhasel_oldg4params.csv'), index=False)
-    print(f"Processed data saved to {os.path.join(datadir, 'paired_data_cuts.csv')}")
+    df.to_csv(os.path.join(datadir, out_fname), index=False)
+    print(f"Processed data saved to {os.path.join(datadir, out_fname)}")
     print(f"Number of events after applying cuts: {len(df)}")
 
 if __name__ == '__main__':
