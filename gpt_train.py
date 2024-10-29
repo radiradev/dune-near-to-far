@@ -84,6 +84,7 @@ if __name__ == '__main__':
         config.merge_from_args(overrides)
     setup_logging(config)
     set_seed(config.system.seed)
+    print(config)
 
     train_dataset = NewPairedData(data_path=args.data_path, train=True)
     val_dataset = NewPairedData(data_path=args.data_path, train=False)
