@@ -13,7 +13,7 @@ For the CVN scores we transform the distribution using a sigmoid to ensure it st
 
  - Change the `data_path` in `NewPairedData` in the `gpt.dataset.py` script (see how to download the dataset below)
 
- - Train using `python3 gpt_train.py`. 
+ - Train using `python3 gpt_train.py <data_path> <work_dir>`. 
 
  - Then use the `gpt_sample.ipynb` notebook to generate new events and make plots.
 

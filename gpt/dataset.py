@@ -10,7 +10,7 @@ class NewPairedData(Dataset):
     Paired data for training the GPT model
     """
     def __init__(self, 
-                 data_path='data/ndfd_reco_only_cuts.noFDhasel_oldg4params.csv', 
+                 data_path='data/ndfd_reco_only_cuts.noFDhasel_oldg4params.csv',
                  near_reco=None, 
                  far_reco=None,
                  train=True):
