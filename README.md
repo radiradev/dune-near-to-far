@@ -35,11 +35,11 @@ wtih `pip` (also possible with conda):
 
 
 ## Paired Dataset
-Download the dataset from [CERNBOX](https://cernbox.cern.ch/s/VL2wOEViP6QTXvv). Then use the provided script to apply cuts to the data. 
+A paired dataset `.h5` file is required for training. This should be the ndfd reconstruction from the paired dataset simulation that has been concatenated into a single file. An example can be downloaded from [CERNBOX](https://cernbox.cern.ch/s/VL2wOEViP6QTXvv). Then use the provided script to apply cuts to the data. 
 ```
-python3 scripts/cut.py /your/path/here/to/new_paired.h5
+python3 scripts/cut.py --in_fname <ndfd_reco_h5_name> --out_fname <output_csv_name> /path/to/datadir/
 ```
-This will create a `paired_data_cuts.csv` file in the same directory as the `.h5` file.
+This will create a `<output_csv_name>` csv file in `/path/to/datadir/` from the `<ndfd_reco_h5_name>` h5 file also in `/path/to/datadir/`. The csv file is used as the input file for training.
 
 ## Variables 
 | Far Detector                | CVN scores           | Near Detector        | ND Reco            | Global          |
