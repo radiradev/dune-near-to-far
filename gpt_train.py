@@ -105,12 +105,11 @@ if __name__ == '__main__':
     # construct the trainer object
     trainer = Trainer(config.trainer, model, train_dataset)
     
-    global best_val_loss
-    best_val_loss = 1000 
+    best_val_loss = torch.inf
     # iteration callback
     def batch_end_callback(trainer):
         global best_val_loss
-        best_val_loss = 1000 
+
         if trainer.iter_num % 10 == 0:
             print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f}")
 
@@ -122,6 +121,7 @@ if __name__ == '__main__':
             with torch.no_grad():   
                 val_loss = estimate_loss(val_loader)
                 print("Validation Loss:", val_loss)
+            print(val_loss, best_val_loss)
 
             # save the latest model
             if val_loss < best_val_loss:

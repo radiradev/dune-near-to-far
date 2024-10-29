@@ -29,7 +29,7 @@ wtih `pip` (also possible with conda):
 ## TO-dos and Issues
 - [ ] - Generation is not very stable - sometimes creates values outside of the required range for scores and energies.
 
-- [ ] - Fix issue with  `best_val_loss` getting overriden at every evaluation in `gpt_train.py`.
+- [x] - Fix issue with  `best_val_loss` getting overriden at every evaluation in `gpt_train.py`.
 
 - [ ] - Explore other generative models. Any conditional generative models should work (diffusion, normalising flows, GANs)
 
