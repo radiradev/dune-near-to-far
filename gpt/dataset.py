@@ -20,18 +20,46 @@ class NewPairedData(Dataset):
         self.train = train
        
         if near_reco is None:
+            # -- default
+            # near_reco = [
+            #     'eRecoP', 'eRecoN', 'eRecoPip', 
+            #     'eRecoPim', 'eRecoPi0', 'eRecoOther', 
+            #     'Ev_reco', 'Elep_reco', 'theta_reco',
+            #     'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
+            #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
+            # ]
+            # -- noN_inputnparticles
+            # near_reco = [
+            #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther', 
+            #     'nP', 'nipip', 'nipim', 'nipi0', 'nipi0', 'nikp', 'nikm', 'nik0', 'niem', 'niother',
+            #     'Ev_reco', 'Elep_reco', 'theta_reco',
+            #     'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
+            #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
+            # ]
+            # -- noN
             near_reco = [
-                'eRecoP', 'eRecoN', 'eRecoPip', 
-                'eRecoPim', 'eRecoPi0', 'eRecoOther', 
+                'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther', 
                 'Ev_reco', 'Elep_reco', 'theta_reco',
                 'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
                 'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             ]
 
         if far_reco is None:
-            
-            cvn_scores = ['fd_numu_score']#, 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
-            far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E'] #,'fd_nue_lep_E', 'fd_numu_nu_E', 'fd_nue_nu_E']
+            # -- default
+            # cvn_scores = ['fd_numu_score']#, 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
+            # far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E'] #,'fd_nue_lep_E', 'fd_numu_nu_E', 'fd_nue_nu_E']
+            # -- allcvn
+            cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
+            far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E']
+            # -- allcvn_fdnuElast
+            # cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
+            # far_reco = ['fd_numu_lep_E', 'fd_numu_had_E', 'fd_numu_nu_E']
+            # -- allcvn_fdlepinfo
+            # cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
+            # far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_reco_method', 'fd_numu_had_E']
+            # -- mostcvn
+            # cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score']
+            # far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E']
         
         self.cvn_scores = cvn_scores
         self.near_reco = near_reco
