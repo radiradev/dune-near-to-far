@@ -77,7 +77,7 @@ class Trainer:
         self.iter_num = 0
         self.iter_time = time.time()
         data_iter = iter(train_loader)
-        num_epochs = 3
+        num_epochs = 8
         for epoch in range(num_epochs):
             print(f"Epoch {epoch}")
             for batch in train_loader:
@@ -102,3 +102,4 @@ class Trainer:
                 # # termination conditions
                 # if config.max_iters is not None and self.iter_num >= config.max_iters:
                 #     break
+
