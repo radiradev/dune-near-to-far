@@ -254,7 +254,8 @@ def main(args):
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         r'$E_\nu^{\mathrm{reco}}$ (GeV)',
-        "nuE_dist_plot.pdf"
+        "nuE_dist_plot.pdf",
+        nd=df[df["class"] == "true"]["Ev_reco"]
     )
     diff_plot(
         np.linspace(-1.0, 1.0, 100), 
@@ -265,11 +266,12 @@ def main(args):
         frac=True
     )
     dist_plot(
-        np.linspace(0.0, 20.0, 100), 
+        np.linspace(0.0, 16.0, 80), 
         df[df["class"] == "true"]["fd_numu_lep_E"],
         df[df["class"] == "predicted"]["fd_numu_lep_E"],
         r'$E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
-        "lepE_dist_plot.pdf"
+        "lepE_dist_plot.pdf",
+        nd=df[df["class"] == "true"]["Elep_reco"]
     )
     diff_plot(
         np.linspace(-1.0, 1.0, 100), 
@@ -284,7 +286,8 @@ def main(args):
         df[df["class"] == "true"]["fd_numu_had_E"],
         df[df["class"] == "predicted"]["fd_numu_had_E"],
         r'$E_{\mathrm{had}}^{\mathrm{reco}}$ (GeV)',
-        "hadE_dist_plot.pdf"
+        "hadE_dist_plot.pdf",
+        nd=df[df["class"] == "true"]["Ev_reco"] - df[df["class"] == "true"]["Elep_reco"]
     )
     diff_plot(
         np.linspace(-1.0, 1.0, 100), 
