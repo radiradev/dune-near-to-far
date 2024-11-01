@@ -5,6 +5,7 @@ Train a model on a 2D gaussian
 import os
 import sys
 import torch
+import argparse
 from torch.utils.data.dataloader import DataLoader
 
 import numpy as np
@@ -15,14 +16,14 @@ from gpt.utils import set_seed, setup_logging, CfgNode as CN
 
 # -----------------------------------------------------------------------------
 
-def get_config():
+def get_config(work_dir):
 
     C = CN()
 
     # system
     C.system = CN()
     C.system.seed = 3407
-    C.system.work_dir = './out/jul9_fix_oldg4params'
+    C.system.work_dir = work_dir
 
     # model
     C.model = GPT.get_default_config()
@@ -50,18 +51,43 @@ def estimate_loss(val_loader):
     model.train()
     return loss
 
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument("data_path", type=str, help="Training data csv.")
+    parser.add_argument("work_dir", type=str, help="Experiment directory, put these in out/.")
+
+    parser.add_argument(
+        "-o", "--config_override",
+        type=str, action="append", default=None,
+        help=(
+            "Argument override for the CfgNode, "
+            "string should be like 'arg=value' e.g. 'model.n_gaussians=30'. "
+            "Can repeat this argument."
+        )
+    )
+
+    args = parser.parse_args()
+
+    return args
 
 if __name__ == '__main__':
+    args = parse_arguments()
+
+    if not os.path.exists(args.work_dir):
+        os.makedirs(args.work_dir)
 
     # get default config and overrides from the command line, if any
-    config = get_config()
-    config.merge_from_args(sys.argv[1:])
-    print(config)
+    config = get_config(args.work_dir)
+    if args.config_override is not None:
+        overrides = [ "--" + override for override in args.config_override ]
+        config.merge_from_args(overrides)
     setup_logging(config)
     set_seed(config.system.seed)
+    print(config)
 
-    train_dataset = NewPairedData(train=True)
-    val_dataset = NewPairedData(train=False)
+    train_dataset = NewPairedData(data_path=args.data_path, train=True)
+    val_dataset = NewPairedData(data_path=args.data_path, train=False)
     val_loader = DataLoader(
             val_dataset,
             shuffle=False,
@@ -80,12 +106,11 @@ if __name__ == '__main__':
     # construct the trainer object
     trainer = Trainer(config.trainer, model, train_dataset)
     
-    global best_val_loss
-    best_val_loss = 1000 
+    best_val_loss = torch.inf
     # iteration callback
     def batch_end_callback(trainer):
         global best_val_loss
-        best_val_loss = 1000 
+
         if trainer.iter_num % 10 == 0:
             print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f}")
 
