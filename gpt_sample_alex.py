@@ -1,5 +1,6 @@
 import os, argparse, warnings
 from collections.abc import MutableMapping
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import torch
@@ -8,6 +9,8 @@ import pandas as pd
 import seaborn as sns
 import json
 import yaml
+import scipy.optimize
+import scipy.stats
 
 from gpt.utils import set_seed, setup_logging, CfgNode as CN
 from gpt.model import GPT
@@ -47,32 +50,101 @@ def get_new_handles(ax):
     ]
     return new_handles, labels
 
-def diff_plot(bins, true, pred, xlabel, savename, frac=False):
+def gauss_fit_func(x, a, mu, sigma):
+    return a * scipy.stats.norm.pdf(x, loc=mu, scale=sigma)
+
+def diff_plot(bins, true, pred, xlabel, savename, frac=False, fit=True, clip=60):
     fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
     ax.vlines(
         0, ymin=0, ymax=1, linestyle="dashed", linewidth=1, transform=ax.get_xaxis_transform()
     )
+    if clip is not None:
+        pred = pred.copy()
+        pred[pred > 60] = 60
+    diffs = pred - true
     if frac:
-        ax.hist((pred - true) / true, bins=bins, histtype="step")
-    else:
-        ax.hist((pred - true), bins=bins, histtype="step")
-    new_handles, labels = get_new_handles(ax)
-    ax.legend(new_handles, labels)
-    ax.set_xlabel(xlabel)
+        diffs = diffs / true
+    ax.hist(diffs, bins=bins, histtype="step")
+    if fit:
+        nphist, npbins = np.histogram(diffs, bins=bins)
+        bin_centres = npbins[:-1] + (npbins[1] - npbins[0])
+        params, _ = scipy.optimize.curve_fit(gauss_fit_func, bin_centres, nphist, [100, 0, 10])
+        fit_x = np.linspace(npbins[0], npbins[-1], 1000)
+        fit_y = gauss_fit_func(fit_x, *params)
+        ax.plot(fit_x, fit_y, c="r")
+        ax.text(
+            0.8, 0.9, r'$\mu =$' + f"{params[1]:.3f}\n" + r'$\sigma = $' + f"{params[2]:.3f}",
+            ha="left", va="top", transform=ax.transAxes, fontsize=16
+        )
+    ax.set_ylabel("No. Events", fontsize=16, loc="top")
+    ax.set_xlabel(xlabel, fontsize=16)
+    ax.set_xlim(left=bins[0], right=bins[-1])
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
 
 def dist_plot(bins, true, pred, xlabel, savename, nd=None):
     fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
+    if nd is not None:
+        ax.hist(nd, bins=bins, histtype="step", label="ND", linestyle="dashed")
     ax.hist(true, bins=bins, histtype="step", label="True")
     ax.hist(pred, bins=bins, histtype="step", label="Pred")
-    if nd is not None:
-        ax.hist(nd, bins=bins, histtype="step", label="ND")
     new_handles, labels = get_new_handles(ax)
-    ax.legend(new_handles, labels)
-    ax.set_xlabel(xlabel)
+    ax.legend(new_handles, labels, fontsize=14)
+    ax.set_xlabel(xlabel, fontsize=16, loc="right")
+    ax.set_ylabel("No. Events", fontsize=16, loc="top")
+    ax.set_xlim(left=bins[0], right=bins[-1])
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
+
+def dist2d_plot(
+    n_bins, range_bins, true_x, true_y, pred_x, pred_y, x_label, y_label, savename, logscale=False
+):
+    true_hist2d, bins_x, bins_y = np.histogram2d(true_x, true_y, bins=n_bins, range=range_bins)
+    pred_hist2d, _, _ = np.histogram2d(pred_x, pred_y, bins=n_bins, range=range_bins)
+    fig, ax = plt.subplots(1, 2, figsize=(14,6), layout="compressed")
+    # extent = [bins_y[0], bins_y[-1], bins_x[0], bins_x[-1]]
+    extent = [bins_x[0], bins_x[-1], bins_y[0], bins_y[-1]]
+    vmin = np.min([np.min(true_hist2d[true_hist2d != 0]), np.min(pred_hist2d[pred_hist2d != 0])])
+    vmax = np.max([np.max(true_hist2d), np.max(pred_hist2d)])
+    if logscale:
+        norm = matplotlib.colors.LogNorm(vmin=vmin, vmax=vmax)
+    else:
+        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+    im = ax[0].imshow(
+        np.ma.masked_where(pred_hist2d == 0, pred_hist2d).T,
+        origin="lower", interpolation="none", extent=extent, norm=norm, cmap="cividis", aspect="auto"
+    )
+    add_identity(ax[0], color="r", linestyle="dashed")
+    ax[1].imshow(
+        np.ma.masked_where(true_hist2d == 0, true_hist2d).T,
+        origin="lower", interpolation="none", extent=extent, norm=norm, cmap="cividis", aspect="auto"
+    )
+    add_identity(ax[1], color="r", linestyle="dashed")
+    cb = fig.colorbar(im, ax=[ax[0], ax[1]], orientation="vertical", location="right")
+    cb.set_label("No. Events", fontsize=12)
+    for a in ax.flatten():
+        a.set_xlabel(x_label, fontsize=16, loc="right")
+        a.set_ylabel(y_label, fontsize=16, loc="top")
+        a.xaxis.set_tick_params(labelsize=12)
+        a.yaxis.set_tick_params(labelsize=12)
+    ax[0].set_title("Model Prediction", fontsize=18, pad=15)
+    ax[1].set_title("Paired Dataset", fontsize=18, pad=15)
+    plt.savefig(os.path.join(args.work_dir, savename))
+    plt.close()
+
+# Thanks stackoverflow
+def add_identity(axes, *line_args, **line_kwargs):
+    identity, = axes.plot([], [], *line_args, **line_kwargs)
+    def callback(axes):
+        low_x, high_x = axes.get_xlim()
+        low_y, high_y = axes.get_ylim()
+        low = max(low_x, low_y)
+        high = min(high_x, high_y)
+        identity.set_data([low, high], [low, high])
+    callback(axes)
+    axes.callbacks.connect('xlim_changed', callback)
+    axes.callbacks.connect('ylim_changed', callback)
+    return axes
 
 def get_stats(true_df, pred_df):
     metrics = {}
@@ -171,14 +243,14 @@ def main(args):
         "cvn_dist_plot.pdf"
     )
     diff_plot(
-        np.linspace(-1.0, 1.0, 100), 
+        np.linspace(-0.25, 0.25, 100), 
         df[df["class"] == "true"]["fd_numu_score"],
         df[df["class"] == "predicted"]["fd_numu_score"],
         "(Pred - True) CVN numu Score",
         "cvn_diff_plot.pdf"
     )
     dist_plot(
-        np.linspace(0.0, 20.0, 100), 
+        np.linspace(0.0, 16.0, 80), 
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         r'$E_\nu^{\mathrm{reco}}$ (GeV)',
@@ -221,6 +293,65 @@ def main(args):
         r'(Pred - True) / True $E_{\mathrm{had}}^{\mathrm{reco}}$',
         "hadE_diff_plot.pdf",
         frac=True
+    )
+    dist2d_plot(
+        70, ((0, 14), (0, 14)),
+        np.array(df[df["class"] == "true"]["Ev_reco"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["Ev_reco"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        r'ND $E_\nu^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "ndfd_nuE_hist2d_true_pred.pdf"
+    )
+    dist2d_plot(
+        (60, 70), ((0, 12), (0, 14)),
+        np.array(df[df["class"] == "true"]["Elep_reco"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["Elep_reco"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        r'ND $E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "ndfd_lepE_hist2d_true_pred.pdf"
+    )
+    dist2d_plot(
+        (40, 70), ((0, 3), (0, 14)),
+        np.array(df[df["class"] == "true"]["eRecoP"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["eRecoP"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        r'ND $E_{\mathrm{proton}}^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "ndfd_protonE_hist2d_true_pred.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (40, 70), ((0, 3), (0, 14)),
+        (
+            np.array(df[df["class"] == "true"]["eRecoPip"]) +
+            np.array(df[df["class"] == "true"]["eRecoPim"])
+        ),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        (
+            np.array(df[df["class"] == "predicted"]["eRecoPip"]) +
+            np.array(df[df["class"] == "predicted"]["eRecoPim"])
+        ),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        r'ND $E_{\pi^\pm}^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "ndfd_pipmE_hist2d_true_pred.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (40, 70), ((0, 3), (0, 14)),
+        np.array(df[df["class"] == "true"]["eRecoPi0"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["eRecoPi0"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        r'ND $E_{\pi^0}^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "ndfd_pi0E_hist2d_true_pred.pdf",
+        logscale=True
     )
 
     get_stats(df[df["class"] == "true"], df[df["class"] == "predicted"])
