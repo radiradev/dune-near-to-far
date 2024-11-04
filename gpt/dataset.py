@@ -43,6 +43,14 @@ class NewPairedData(Dataset):
                 'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
                 'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             ]
+            # -- noN_trackercontained
+            # near_reco = [
+            #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther', 
+            #     'Ev_reco', 'Elep_reco', 'theta_reco',
+            #     'muon_tracker', 'muon_contained',
+            #     'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
+            #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
+            # ]
 
         if far_reco is None:
             # -- default
