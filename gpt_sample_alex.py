@@ -165,6 +165,8 @@ def get_stats(true_df, pred_df):
     with open(os.path.join(args.work_dir, "metrics.yml"), "w") as f:
         yaml.dump(metrics, f)
 
+
+
 def main(args):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f'Device is {device}')
@@ -257,6 +259,13 @@ def main(args):
         "nuE_dist_plot.pdf",
         nd=df[df["class"] == "true"]["Ev_reco"]
     )
+    dist_plot(
+        np.linspace(0.0, 6.0, 150), 
+        df[df["class"] == "true"]["fd_numu_nu_E"],
+        df[df["class"] == "predicted"]["fd_numu_nu_E"],
+        r'$E_\nu^{\mathrm{reco}}$ (GeV)',
+        "nuE_dist_finebinning_plot.pdf"
+    )
     diff_plot(
         np.linspace(-1.0, 1.0, 100), 
         df[df["class"] == "true"]["fd_numu_nu_E"],
@@ -306,6 +315,16 @@ def main(args):
         r'ND $E_\nu^{\mathrm{reco}}$ (GeV)',
         r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
         "ndfd_nuE_hist2d_true_pred.pdf"
+    )
+    dist2d_plot(
+        150, ((0, 6), (0, 6)),
+        np.array(df[df["class"] == "true"]["Ev_reco"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["Ev_reco"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        r'ND $E_\nu^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "ndfd_nuE_hist2d_finebinning_true_pred.pdf"
     )
     dist2d_plot(
         (60, 70), ((0, 12), (0, 14)),
