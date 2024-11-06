@@ -6,6 +6,7 @@ import os
 import sys
 import torch
 import argparse
+import glob
 from torch.utils.data.dataloader import DataLoader
 
 import numpy as np
@@ -51,6 +52,29 @@ def estimate_loss(val_loader):
     model.train()
     return loss
 
+def get_reweight_scalefactors(train_fd_nu_E, reweight_dir):
+    bins_file = glob.glob(os.path.join(reweight_dir, "*_bins.npy"))
+    assert len(bins_file) == 1, "Invalid rewight dir structure."
+    bins_file = bins_file[0]
+    target_bins = np.load(bins_file)
+    hist_file = glob.glob(os.path.join(reweight_dir, "*_hist.npy"))
+    assert len(hist_file) == 1, "Invalid rewight dir structure."
+    hist_file = hist_file[0]
+    target_hist = np.load(hist_file)
+
+    train_hist, train_bins = np.histogram(train_fd_nu_E, bins=target_bins)
+    train_hist = train_hist.astype(float)
+    for i in range(len(train_hist)):
+        train_hist[i] /= (train_bins[i + 1] - train_bins[i])
+    train_hist /= np.sum(train_hist)
+    ratio_hist = target_hist / train_hist
+
+    print("Training sample weights histogram is:")
+    print(ratio_hist)
+    print(train_bins)
+
+    return ratio_hist, train_bins
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
@@ -64,6 +88,15 @@ def parse_arguments():
             "Argument override for the CfgNode, "
             "string should be like 'arg=value' e.g. 'model.n_gaussians=30'. "
             "Can repeat this argument."
+        )
+    )
+
+    parser.add_argument(
+        "--training_reweight",
+        type=str, default=None,
+        help=(
+            "Weight training samples to a flux."
+            "A dir containing two files for the bin edges (*_bins.npy) and count (*_hist.npy)."
         )
     )
 
@@ -101,7 +134,26 @@ if __name__ == '__main__':
     config.model.far_reco_size = train_dataset.get_far_reco_length()
     config.model.scores_size = train_dataset.get_scores_length()
     
-    model = GPT(config.model)
+    if args.training_reweight is not None:
+        print(f"Reweighting training using {args.training_reweight}")
+        fd_numu_nu_E_input_col_idx = (
+            len(train_dataset.near_reco) +
+            len(train_dataset.cvn_scores) +
+            train_dataset.far_reco.index("fd_numu_nu_E")
+        )
+        weights_hist, weights_bins = get_reweight_scalefactors(
+            train_dataset.data[:, fd_numu_nu_E_input_col_idx], args.training_reweight
+        )
+        model = GPT(
+            config.model,
+            sample_weights_data=(
+                weights_hist,
+                weights_bins,
+                fd_numu_nu_E_input_col_idx - len(train_dataset.near_reco)
+            )
+        )
+    else:
+        model = GPT(config.model)
 
     # construct the trainer object
     trainer = Trainer(config.trainer, model, train_dataset)
