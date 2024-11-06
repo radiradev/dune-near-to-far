@@ -144,6 +144,8 @@ if __name__ == '__main__':
         weights_hist, weights_bins = get_reweight_scalefactors(
             train_dataset.data[:, fd_numu_nu_E_input_col_idx], args.training_reweight
         )
+        np.save(os.path.join(args.work_dir, "sampling_weights_hist.npy"), weights_hist)
+        np.save(os.path.join(args.work_dir, "sampling_weights_bins.npy"), weights_bins)
         model = GPT(
             config.model,
             sample_weights_data=(
