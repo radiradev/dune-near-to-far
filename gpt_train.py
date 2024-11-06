@@ -54,11 +54,11 @@ def estimate_loss(val_loader):
 
 def get_reweight_scalefactors(train_fd_nu_E, reweight_dir):
     bins_file = glob.glob(os.path.join(reweight_dir, "*_bins.npy"))
-    assert len(bins_file) == 1, "Invalid rewight dir structure."
+    assert len(bins_file) == 1, "Invalid reweight dir structure."
     bins_file = bins_file[0]
     target_bins = np.load(bins_file)
     hist_file = glob.glob(os.path.join(reweight_dir, "*_hist.npy"))
-    assert len(hist_file) == 1, "Invalid rewight dir structure."
+    assert len(hist_file) == 1, "Invalid reweight dir structure."
     hist_file = hist_file[0]
     target_hist = np.load(hist_file)
 
