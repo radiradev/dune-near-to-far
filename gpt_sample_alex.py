@@ -53,7 +53,7 @@ def get_new_handles(ax):
 def gauss_fit_func(x, a, mu, sigma):
     return a * scipy.stats.norm.pdf(x, loc=mu, scale=sigma)
 
-def diff_plot(bins, true, pred, xlabel, savename, frac=False, fit=True, clip=60):
+def diff_plot(bins, true, pred, weights, xlabel, savename, frac=False, fit=True, clip=60):
     fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
     ax.vlines(
         0, ymin=0, ymax=1, linestyle="dashed", linewidth=1, transform=ax.get_xaxis_transform()
@@ -64,9 +64,9 @@ def diff_plot(bins, true, pred, xlabel, savename, frac=False, fit=True, clip=60)
     diffs = pred - true
     if frac:
         diffs = diffs / true
-    ax.hist(diffs, bins=bins, histtype="step")
+    ax.hist(diffs, bins=bins, weights=weights, histtype="step")
     if fit:
-        nphist, npbins = np.histogram(diffs, bins=bins)
+        nphist, npbins = np.histogram(diffs, bins=bins, weights=weights)
         bin_centres = npbins[:-1] + (npbins[1] - npbins[0])
         params, _ = scipy.optimize.curve_fit(gauss_fit_func, bin_centres, nphist, [100, 0, 10])
         fit_x = np.linspace(npbins[0], npbins[-1], 1000)
@@ -82,12 +82,12 @@ def diff_plot(bins, true, pred, xlabel, savename, frac=False, fit=True, clip=60)
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
 
-def dist_plot(bins, true, pred, xlabel, savename, nd=None):
+def dist_plot(bins, true, pred, weights, xlabel, savename, nd=None):
     fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
     if nd is not None:
-        ax.hist(nd, bins=bins, histtype="step", label="ND", linestyle="dashed")
-    ax.hist(true, bins=bins, histtype="step", label="True")
-    ax.hist(pred, bins=bins, histtype="step", label="Pred")
+        ax.hist(nd, bins=bins, weights=weights, histtype="step", label="ND", linestyle="dashed")
+    ax.hist(true, bins=bins, weights=weights, histtype="step", label="True")
+    ax.hist(pred, bins=bins, weights=weights, histtype="step", label="Pred")
     new_handles, labels = get_new_handles(ax)
     ax.legend(new_handles, labels, fontsize=14)
     ax.set_xlabel(xlabel, fontsize=16, loc="right")
@@ -97,10 +97,15 @@ def dist_plot(bins, true, pred, xlabel, savename, nd=None):
     plt.close()
 
 def dist2d_plot(
-    n_bins, range_bins, true_x, true_y, pred_x, pred_y, x_label, y_label, savename, logscale=False
+    n_bins, range_bins, true_x, true_y, pred_x, pred_y, weights, x_label, y_label, savename,
+    logscale=False
 ):
-    true_hist2d, bins_x, bins_y = np.histogram2d(true_x, true_y, bins=n_bins, range=range_bins)
-    pred_hist2d, _, _ = np.histogram2d(pred_x, pred_y, bins=n_bins, range=range_bins)
+    true_hist2d, bins_x, bins_y = np.histogram2d(
+        true_x, true_y, bins=n_bins, range=range_bins, weights=weights
+    )
+    pred_hist2d, _, _ = np.histogram2d(
+        pred_x, pred_y, bins=n_bins, range=range_bins, weights=weights
+    )
     fig, ax = plt.subplots(1, 2, figsize=(14,6), layout="compressed")
     # extent = [bins_y[0], bins_y[-1], bins_x[0], bins_x[-1]]
     extent = [bins_x[0], bins_x[-1], bins_y[0], bins_y[-1]]
@@ -146,12 +151,14 @@ def add_identity(axes, *line_args, **line_kwargs):
     axes.callbacks.connect('ylim_changed', callback)
     return axes
 
-def get_stats(true_df, pred_df):
+def get_stats(true_df, pred_df, weights):
+    if weights is None:
+        weights = np.ones(pred_fd.shape)
     metrics = {}
     pred_df = pred_df.copy()
     pred_df.loc[pred_df["fd_numu_nu_E"] > 60, "fd_numu_nu_E"] = 60
     metrics["all_nuE_mae"] = float(
-        np.mean(np.abs(true_df["fd_numu_nu_E"] - pred_df["fd_numu_nu_E"]))
+        np.mean(np.abs(true_df["fd_numu_nu_E"] - pred_df["fd_numu_nu_E"]) * weights)
     )
     metrics["min_max_nuE_pred"] = [
         float(np.min(pred_df["fd_numu_nu_E"])), float(np.max(pred_df["fd_numu_nu_E"]))
@@ -160,12 +167,10 @@ def get_stats(true_df, pred_df):
         float(np.min(true_df["fd_numu_nu_E"])), float(np.max(true_df["fd_numu_nu_E"]))
     ]
     metrics["all_cvnnumu_mae"] = float(
-        np.mean(np.abs(true_df["fd_numu_score"] - pred_df["fd_numu_score"]))
+        np.mean(np.abs(true_df["fd_numu_score"] - pred_df["fd_numu_score"]) * weights)
     )
     with open(os.path.join(args.work_dir, "metrics.yml"), "w") as f:
         yaml.dump(metrics, f)
-
-
 
 def main(args):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -226,6 +231,26 @@ def main(args):
     # ignore future warnings
     warnings.simplefilter(action='ignore', category=FutureWarning)
 
+    if args.apply_sample_weights or args.apply_sample_weights_from is not None:
+        if args.apply_sample_weights:
+            weights_hist = np.load(os.path.join(args.work_dir, "sampling_weights_hist.npy"))
+            weights_bins = np.load(os.path.join(args.work_dir, "sampling_weights_bins.npy"))
+        else:
+            weights_hist = np.load(
+                os.path.join(args.apply_sample_weights_from, "sampling_weights_hist.npy")
+            )
+            weights_bins = np.load(
+                os.path.join(args.apply_sample_weights_from, "sampling_weights_bins.npy")
+            )
+        args.work_dir = os.path.join(args.work_dir, "weighted_plots")
+        if not os.path.exists(args.work_dir):
+            os.makedirs(args.work_dir)
+        print(f"Applying sampling weights, plots will be in {args.work_dir}")
+        true_fd_numu_nu_Es = np.array(df[df["class"] == "true"]["fd_numu_nu_E"])
+        weights = weights_hist[np.digitize(true_fd_numu_nu_Es, weights_bins) - 1]
+    else:
+        weights = None
+
     sns.set_context('talk')
     bins = np.linspace(0.0, 1.0, 40)
     fig, ax = plt.subplots(1, 1, figsize=(5, 5))
@@ -241,6 +266,7 @@ def main(args):
         np.linspace(0.0, 1.0, 50), 
         df[df["class"] == "true"]["fd_numu_score"],
         df[df["class"] == "predicted"]["fd_numu_score"],
+        weights,
         "CVN numu Score",
         "cvn_dist_plot.pdf"
     )
@@ -248,6 +274,7 @@ def main(args):
         np.linspace(-0.25, 0.25, 100), 
         df[df["class"] == "true"]["fd_numu_score"],
         df[df["class"] == "predicted"]["fd_numu_score"],
+        weights,
         "(Pred - True) CVN numu Score",
         "cvn_diff_plot.pdf"
     )
@@ -255,6 +282,7 @@ def main(args):
         np.linspace(0.0, 16.0, 80), 
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
+        weights,
         r'$E_\nu^{\mathrm{reco}}$ (GeV)',
         "nuE_dist_plot.pdf",
         nd=df[df["class"] == "true"]["Ev_reco"]
@@ -263,6 +291,7 @@ def main(args):
         np.linspace(0.0, 6.0, 150), 
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
+        weights,
         r'$E_\nu^{\mathrm{reco}}$ (GeV)',
         "nuE_dist_finebinning_plot.pdf"
     )
@@ -270,6 +299,7 @@ def main(args):
         np.linspace(-1.0, 1.0, 100), 
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
+        weights,
         r'(Pred - True) / True $E_\nu^{\mathrm{reco}}$',
         "nuE_diff_plot.pdf",
         frac=True
@@ -278,6 +308,7 @@ def main(args):
         np.linspace(0.0, 16.0, 80), 
         df[df["class"] == "true"]["fd_numu_lep_E"],
         df[df["class"] == "predicted"]["fd_numu_lep_E"],
+        weights,
         r'$E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
         "lepE_dist_plot.pdf",
         nd=df[df["class"] == "true"]["Elep_reco"]
@@ -286,6 +317,7 @@ def main(args):
         np.linspace(-1.0, 1.0, 100), 
         df[df["class"] == "true"]["fd_numu_lep_E"],
         df[df["class"] == "predicted"]["fd_numu_lep_E"],
+        weights,
         r'(Pred - True) / True $E_{\mathrm{lep}}^{\mathrm{reco}}$',
         "lepE_diff_plot.pdf",
         frac=True
@@ -294,6 +326,7 @@ def main(args):
         np.linspace(0.0, 10.0, 100), 
         df[df["class"] == "true"]["fd_numu_had_E"],
         df[df["class"] == "predicted"]["fd_numu_had_E"],
+        weights,
         r'$E_{\mathrm{had}}^{\mathrm{reco}}$ (GeV)',
         "hadE_dist_plot.pdf",
         nd=df[df["class"] == "true"]["Ev_reco"] - df[df["class"] == "true"]["Elep_reco"]
@@ -302,6 +335,7 @@ def main(args):
         np.linspace(-1.0, 1.0, 100), 
         df[df["class"] == "true"]["fd_numu_had_E"],
         df[df["class"] == "predicted"]["fd_numu_had_E"],
+        weights,
         r'(Pred - True) / True $E_{\mathrm{had}}^{\mathrm{reco}}$',
         "hadE_diff_plot.pdf",
         frac=True
@@ -312,6 +346,7 @@ def main(args):
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
         np.array(df[df["class"] == "predicted"]["Ev_reco"]),
         np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
         r'ND $E_\nu^{\mathrm{reco}}$ (GeV)',
         r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
         "ndfd_nuE_hist2d_true_pred.pdf"
@@ -322,6 +357,7 @@ def main(args):
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
         np.array(df[df["class"] == "predicted"]["Ev_reco"]),
         np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
         r'ND $E_\nu^{\mathrm{reco}}$ (GeV)',
         r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
         "ndfd_nuE_hist2d_finebinning_true_pred.pdf"
@@ -332,6 +368,7 @@ def main(args):
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
         np.array(df[df["class"] == "predicted"]["Elep_reco"]),
         np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
         r'ND $E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
         r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
         "ndfd_lepE_hist2d_true_pred.pdf"
@@ -342,6 +379,7 @@ def main(args):
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
         np.array(df[df["class"] == "predicted"]["eRecoP"]),
         np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
         r'ND $E_{\mathrm{proton}}^{\mathrm{reco}}$ (GeV)',
         r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
         "ndfd_protonE_hist2d_true_pred.pdf",
@@ -359,6 +397,7 @@ def main(args):
             np.array(df[df["class"] == "predicted"]["eRecoPim"])
         ),
         np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
         r'ND $E_{\pi^\pm}^{\mathrm{reco}}$ (GeV)',
         r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
         "ndfd_pipmE_hist2d_true_pred.pdf",
@@ -370,13 +409,14 @@ def main(args):
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
         np.array(df[df["class"] == "predicted"]["eRecoPi0"]),
         np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
         r'ND $E_{\pi^0}^{\mathrm{reco}}$ (GeV)',
         r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
         "ndfd_pi0E_hist2d_true_pred.pdf",
         logscale=True
     )
 
-    get_stats(df[df["class"] == "true"], df[df["class"] == "predicted"])
+    get_stats(df[df["class"] == "true"], df[df["class"] == "predicted"], weights)
 
     nu_true = true_df['Ev']
     nu_nd_reco = true_df['Ev_reco']
@@ -447,8 +487,22 @@ def parse_arguments():
 
     parser.add_argument("data_path", type=str, help="Training data csv.")
     parser.add_argument("work_dir", type=str, help="Experiment directory, somewhere in out/.")
+    parser.add_argument(
+        "--apply_sample_weights",
+        action="store_true", help="Apply training sample weighting to validation plots"
+    )
+    parser.add_argument(
+        "--apply_sample_weights_from",
+        type=str, default=None,
+        help="Apply training sample weighting from another experiment dir to validation plots"
+    )
 
     args = parser.parse_args()
+
+    if args.apply_sample_weights and args.apply_sample_weights_from is not None:
+        raise ValueError(
+            "Can only have one of --apply_sample_weights or --apply_sample_weights_from"
+        )
 
     return args
 
