@@ -278,14 +278,14 @@ class GPT(nn.Module):
                     1
                 ]
                 sample_weights = sample_weights.reshape(sample_weights.shape[0], 1)
-                # Apply training sample weights to log_probs
-                scores_loss = (
-                    -scores_mixture.log_prob(targets[:, :self.scores_size]) * sample_weights
-                ).mean()
-                far_reco_loss = (
-                    -far_reco_mixture.log_prob(targets[:, self.scores_size:]) * sample_weights
-                ).mean()
-                loss = scores_loss + far_reco_loss
+                # Apply sigmoid then training sample weights to log_probs to make loss
+                scores_loss = -scores_mixture.log_prob(targets[:, :self.scores_size])
+                scores_loss = torch.nn.functional.sigmoid(scores_loss) * sample_weights
+                scores_loss = scores_loss.mean()
+                far_reco_loss = -far_reco_mixture.log_prob(targets[:, self.scores_size:])
+                far_reco_loss = torch.nn.functional.sigmoid(far_reco_loss) * sample_weights
+                far_reco_loss = far_reco_loss.mean()
+                loss = (scores_loss + far_reco_loss) / 2
             else:
                 scores_loss = -scores_mixture.log_prob(targets[:, :self.scores_size]).mean()
                 far_reco_loss = -far_reco_mixture.log_prob(targets[:, self.scores_size:]).mean()
