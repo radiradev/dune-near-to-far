@@ -52,15 +52,22 @@ def estimate_loss(val_loader):
     model.train()
     return loss
 
-def get_reweight_scalefactors(train_fd_nu_E, reweight_dir):
-    bins_file = glob.glob(os.path.join(reweight_dir, "*_bins.npy"))
-    assert len(bins_file) == 1, "Invalid reweight dir structure."
-    bins_file = bins_file[0]
-    target_bins = np.load(bins_file)
-    hist_file = glob.glob(os.path.join(reweight_dir, "*_hist.npy"))
-    assert len(hist_file) == 1, "Invalid reweight dir structure."
-    hist_file = hist_file[0]
-    target_hist = np.load(hist_file)
+def get_reweight_scalefactors(train_fd_nu_E, reweight_dir, hack_mode):
+    if hack_mode == 1:
+        reweight_dir = "data/prism_nufit_osc_fd_erec"
+    if hack_mode == 2:
+        target_bins = np.concatenate([np.array([0.0]), np.linspace(0.2, 12.0, 119), np.array([120.0])])
+        target_hist = np.full(120, 1.0)
+        target_hist /= np.sum(target_hist)
+    else:
+        bins_file = glob.glob(os.path.join(reweight_dir, "*_bins.npy"))
+        assert len(bins_file) == 1, "Invalid reweight dir structure."
+        bins_file = bins_file[0]
+        target_bins = np.load(bins_file)
+        hist_file = glob.glob(os.path.join(reweight_dir, "*_hist.npy"))
+        assert len(hist_file) == 1, "Invalid reweight dir structure."
+        hist_file = hist_file[0]
+        target_hist = np.load(hist_file)
 
     train_hist, train_bins = np.histogram(train_fd_nu_E, bins=target_bins)
     train_hist = train_hist.astype(float)
@@ -68,6 +75,13 @@ def get_reweight_scalefactors(train_fd_nu_E, reweight_dir):
         train_hist[i] /= (train_bins[i + 1] - train_bins[i])
     train_hist /= np.sum(train_hist)
     ratio_hist = target_hist / train_hist
+
+    if hack_mode == 1:
+        ratio_hist[-2:] = 1.0
+        ratio_hist[0] = 1.0
+    if hack_mode == 2:
+        ratio_hist[0] = 1.0
+        ratio_hist[-1] = 1.0
 
     print("Training sample weights histogram is:")
     print(ratio_hist)
@@ -99,8 +113,18 @@ def parse_arguments():
             "A dir containing two files for the bin edges (*_bins.npy) and count (*_hist.npy)."
         )
     )
+    parser.add_argument(
+        "--training_reweight_hack_mode",
+        type=int, default=None,
+        help=(
+            "1: Use osc weights but ignore very low and high energies "
+            "2: Weight to uniform except for very low and high energies"
+        )
+    )
 
     args = parser.parse_args()
+
+    assert args.training_reweight is None or args.training_reweight_hack_mode is None
 
     return args
 
@@ -134,7 +158,7 @@ if __name__ == '__main__':
     config.model.far_reco_size = train_dataset.get_far_reco_length()
     config.model.scores_size = train_dataset.get_scores_length()
     
-    if args.training_reweight is not None:
+    if args.training_reweight is not None or args.training_reweight_hack_mode is not None:
         print(f"Reweighting training using {args.training_reweight}")
         fd_numu_nu_E_input_col_idx = (
             len(train_dataset.near_reco) +
@@ -142,7 +166,9 @@ if __name__ == '__main__':
             train_dataset.far_reco.index("fd_numu_nu_E")
         )
         weights_hist, weights_bins = get_reweight_scalefactors(
-            train_dataset.data[:, fd_numu_nu_E_input_col_idx], args.training_reweight
+            train_dataset.data[:, fd_numu_nu_E_input_col_idx],
+            args.training_reweight,
+            args.training_reweight_hack_mode
         )
         np.save(os.path.join(args.work_dir, "sampling_weights_hist.npy"), weights_hist)
         np.save(os.path.join(args.work_dir, "sampling_weights_bins.npy"), weights_bins)
