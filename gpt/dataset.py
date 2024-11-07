@@ -43,11 +43,11 @@ class NewPairedData(Dataset):
             #     'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
             #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             # ]
-            # -- noN_noleppdg
+            # -- noN_noleppdg # NOTE I accidently left 'reco_lepton_pdg' in here for some experiments
             near_reco = [
                 'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
                 'Ev_reco', 'Elep_reco', 'theta_reco',
-                'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
+                'reco_numu', 'reco_nc', 'reco_nue',
                 'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             ]
             # -- noN_trackercontained
