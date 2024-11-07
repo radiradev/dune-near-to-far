@@ -9,46 +9,70 @@ class NewPairedData(Dataset):
     """
     Paired data for training the GPT model
     """
-    def __init__(self, 
+    def __init__(self,
                  data_path='data/ndfd_reco_only_cuts.noFDhasel_oldg4params.csv',
-                 near_reco=None, 
+                 near_reco=None,
                  far_reco=None,
                  train=True):
-        
+
         super().__init__()
         self.data_path = data_path
         self.train = train
-       
+
         if near_reco is None:
             # -- default
             # near_reco = [
-            #     'eRecoP', 'eRecoN', 'eRecoPip', 
-            #     'eRecoPim', 'eRecoPi0', 'eRecoOther', 
+            #     'eRecoP', 'eRecoN', 'eRecoPip',
+            #     'eRecoPim', 'eRecoPi0', 'eRecoOther',
             #     'Ev_reco', 'Elep_reco', 'theta_reco',
             #     'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
             #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             # ]
             # -- noN_inputnparticles
             # near_reco = [
-            #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther', 
+            #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
             #     'nP', 'nipip', 'nipim', 'nipi0', 'nipi0', 'nikp', 'nikm', 'nik0', 'niem', 'niother',
             #     'Ev_reco', 'Elep_reco', 'theta_reco',
             #     'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
             #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             # ]
             # -- noN
+            # near_reco = [
+            #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
+            #     'Ev_reco', 'Elep_reco', 'theta_reco',
+            #     'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
+            #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
+            # ]
+            # -- noN_noleppdg
             near_reco = [
-                'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther', 
+                'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
                 'Ev_reco', 'Elep_reco', 'theta_reco',
                 'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
                 'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             ]
             # -- noN_trackercontained
             # near_reco = [
-            #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther', 
+            #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
             #     'Ev_reco', 'Elep_reco', 'theta_reco',
             #     'muon_tracker', 'muon_contained',
             #     'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
+            #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
+            # ]
+            # -- noN_trackercontained_ehadveto
+            # near_reco = [
+            #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
+            #     'Ev_reco', 'Elep_reco', 'theta_reco',
+            #     'muon_tracker', 'muon_contained', 'Ehad_veto',
+            #     'reco_numu', 'reco_nc', 'reco_nue',
+            #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
+            # ]
+            # -- noN_trackercontained_ehadveto_inputparticles
+            # near_reco = [
+            #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
+            #     'nP', 'nipip', 'nipim', 'nipi0', 'nipi0', 'nikp', 'nikm', 'nik0', 'niem', 'niother',
+            #     'Ev_reco', 'Elep_reco', 'theta_reco',
+            #     'muon_tracker', 'muon_contained', 'Ehad_veto',
+            #     'reco_numu', 'reco_nc', 'reco_nue',
             #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             # ]
 
@@ -71,13 +95,13 @@ class NewPairedData(Dataset):
             # --allcvn_reordered
             # cvn_scores = ['fd_nue_score', 'fd_nc_score', 'fd_nutau_score', 'fd_numu_score']
             # far_reco = ['fd_numu_lep_E', 'fd_numu_had_E', 'fd_numu_nu_E']
-        
+
         self.cvn_scores = cvn_scores
         self.near_reco = near_reco
         self.far_reco = far_reco
         self.data = self.load_data()
 
-        self.block_size = len(near_reco) + len(cvn_scores) + len(far_reco) + 1 
+        self.block_size = len(near_reco) + len(cvn_scores) + len(far_reco) + 1
 
     def load_data(self):
         df = pd.read_csv(self.data_path)
@@ -86,7 +110,7 @@ class NewPairedData(Dataset):
         df = df[self.near_reco + self.cvn_scores + self.far_reco]
         data = df.to_numpy().astype(np.float32)
         samples_in_train = 70_000
-       
+
         if self.train:
             data = data[:samples_in_train]
         else:
@@ -96,7 +120,7 @@ class NewPairedData(Dataset):
 
     def get_scores_length(self):
         return len(self.cvn_scores)
-    
+
     def get_far_reco_length(self):
         return len(self.far_reco)
 
@@ -115,20 +139,20 @@ class PairedData(Dataset):
     """
     Paired data for training the GPT model
     """
-    def __init__(self, 
-                 data_path='/global/cfs/cdirs/dune/users/rradev/near_to_far/paired_ndfd.root', 
-                 near_reco=None, 
+    def __init__(self,
+                 data_path='/global/cfs/cdirs/dune/users/rradev/near_to_far/paired_ndfd.root',
+                 near_reco=None,
                  far_reco=None,
                  train=True):
-        
+
         super().__init__()
         self.data_path = data_path
         self.train = train
-       
+
         if near_reco is None:
             near_reco = [
-                'eRecoP', 'eRecoN', 'eRecoPip', 
-                'eRecoPim', 'eRecoPi0', 'eRecoOther', 
+                'eRecoP', 'eRecoN', 'eRecoPip',
+                'eRecoPim', 'eRecoPi0', 'eRecoOther',
                 'Ev_reco', 'Elep_reco', 'theta_reco',
                 'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
             ]
@@ -136,13 +160,13 @@ class PairedData(Dataset):
         if far_reco is None:
             cvn_scores = ['numu_score', 'nue_score', 'nc_score', 'nutau_score']
             far_reco = ['nc_nu_E', 'numu_nu_E', 'nue_nu_E']
-        
+
         self.cvn_scores = cvn_scores
         self.near_reco = near_reco
         self.far_reco = far_reco
         self.data = self.load_data()
 
-        self.block_size = len(near_reco) + len(far_reco) + len(cvn_scores) + 1 
+        self.block_size = len(near_reco) + len(far_reco) + len(cvn_scores) + 1
 
     def load_data(self):
         tree = uproot.open(self.data_path)['nd_fd_reco']
@@ -152,16 +176,16 @@ class PairedData(Dataset):
         far_det = tree.arrays(self.far_reco, library='pd').to_numpy()
         # find rows where the energy is 0
         row_mask = far_det[:, 0] != 0
-        
+
         data = np.concatenate((near_det, cvn_scores, far_det), axis=1)
         data = data[row_mask]
         samples_in_train = 70_000
-       
+
         if self.train:
             self.near_data = near_det[:samples_in_train]
             self.far_data = far_det[:samples_in_train]
             data = data[:samples_in_train]
-        
+
         else:
             self.near_data = near_det[samples_in_train:]
             self.far_data =  far_det[samples_in_train:]
@@ -171,7 +195,7 @@ class PairedData(Dataset):
 
     def get_scores_length(self):
         return len(self.cvn_scores)
-    
+
     def get_far_reco_length(self):
         return len(self.far_reco)
 
@@ -184,12 +208,10 @@ class PairedData(Dataset):
     def __getitem__(self, idx):
         sample = torch.tensor(self.data[idx], dtype=torch.float)
         return sample[:-1], sample[len(self.near_reco):]
-    
-
-
 
 # if name main
 if __name__ == "__main__":
     dataset = PairedData('/global/cfs/cdirs/dune/users/rradev/near_to_far/paired_ndfd.root')
     print(dataset[0])
     print(dataset[0][0].shape)
+
