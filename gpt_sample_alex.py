@@ -153,12 +153,15 @@ def add_identity(axes, *line_args, **line_kwargs):
 
 def get_stats(true_df, pred_df, weights):
     if weights is None:
-        weights = np.ones(pred_fd.shape)
+        weights = np.ones(pred_df["fd_numu_nu_E"].shape)
     metrics = {}
     pred_df = pred_df.copy()
     pred_df.loc[pred_df["fd_numu_nu_E"] > 60, "fd_numu_nu_E"] = 60
     metrics["all_nuE_mae"] = float(
         np.mean(np.abs(true_df["fd_numu_nu_E"] - pred_df["fd_numu_nu_E"]) * weights)
+    )
+    metrics["all_nuE_mae_unweighted"] = float(
+        np.mean(np.abs(true_df["fd_numu_nu_E"] - pred_df["fd_numu_nu_E"]))
     )
     metrics["min_max_nuE_pred"] = [
         float(np.min(pred_df["fd_numu_nu_E"])), float(np.max(pred_df["fd_numu_nu_E"]))
@@ -168,6 +171,9 @@ def get_stats(true_df, pred_df, weights):
     ]
     metrics["all_cvnnumu_mae"] = float(
         np.mean(np.abs(true_df["fd_numu_score"] - pred_df["fd_numu_score"]) * weights)
+    )
+    metrics["all_cvnnumu_mae_unweighted"] = float(
+        np.mean(np.abs(true_df["fd_numu_score"] - pred_df["fd_numu_score"]))
     )
     with open(os.path.join(args.work_dir, "metrics.yml"), "w") as f:
         yaml.dump(metrics, f)
