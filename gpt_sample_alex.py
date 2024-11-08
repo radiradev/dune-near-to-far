@@ -178,6 +178,38 @@ def get_stats(true_df, pred_df, weights):
     with open(os.path.join(args.work_dir, "metrics.yml"), "w") as f:
         yaml.dump(metrics, f)
 
+def make_sample_weights_plots(bins, ratio_hist, weights, fd_numu_nu_E):
+    fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
+    ax.hist(fd_numu_nu_E, bins=bins, histtype="step", density=True)
+    ax.set_title("Original (ND Beam Flux) Spectrum", fontsize=18, pad=15)
+    ax.set_xlabel(r'FD $E_\nu^{\mathrm{reco}}$ (GeV)', fontsize=16, loc="right")
+    ax.set_ylabel("Density", fontsize=16, loc="top")
+    ax.set_xlim(0.0, 12.0)
+    plt.savefig(os.path.join(args.work_dir, "original_spectrum.pdf"))
+    plt.close()
+
+    fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
+    ax.hist(
+        np.array([ (bins[i] + bins[i + 1]) / 2 for i in range(len(ratio_hist))]),
+        bins=bins, weights=ratio_hist, histtype="step"
+    )
+    ax.set_title("Training Sample Weighting", fontsize=18, pad=15)
+    ax.set_xlabel(r'FD $E_\nu^{\mathrm{reco}}$ (GeV)', fontsize=16, loc="right")
+    ax.set_ylabel("Weights", fontsize=16, loc="top")
+    ax.set_xlim(0.0, 12.0)
+    ax.set_ylim(0.0, 3.0)
+    plt.savefig(os.path.join(args.work_dir, "weights_spectrum.pdf"))
+    plt.close()
+
+    fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
+    ax.hist(fd_numu_nu_E, bins=bins, weights=weights, histtype="step", density=True)
+    ax.set_title("Weighted (FD NuFIT Oscillated) Spectrum", fontsize=18, pad=15)
+    ax.set_xlabel(r'FD $E_\nu^{\mathrm{reco}}$ (GeV)', fontsize=16, loc="right")
+    ax.set_ylabel("Density", fontsize=16, loc="top")
+    ax.set_xlim(0.0, 12.0)
+    plt.savefig(os.path.join(args.work_dir, "weighted_spectrum.pdf"))
+    plt.close()
+
 def main(args):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     print(f'Device is {device}')
@@ -294,11 +326,19 @@ def main(args):
         nd=df[df["class"] == "true"]["Ev_reco"]
     )
     dist_plot(
+        np.linspace(0.0, 8.0, 80), 
+        df[df["class"] == "true"]["fd_numu_nu_E"],
+        df[df["class"] == "predicted"]["fd_numu_nu_E"],
+        weights,
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "nuE_dist_fineishbinning_plot.pdf"
+    )
+    dist_plot(
         np.linspace(0.0, 6.0, 150), 
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         weights,
-        r'$E_\nu^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
         "nuE_dist_finebinning_plot.pdf"
     )
     diff_plot(
@@ -306,7 +346,7 @@ def main(args):
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         weights,
-        r'(Pred - True) / True $E_\nu^{\mathrm{reco}}$',
+        r'(Pred - True) / True FD $E_\nu^{\mathrm{reco}}$',
         "nuE_diff_plot.pdf",
         frac=True
     )
@@ -324,7 +364,7 @@ def main(args):
         df[df["class"] == "true"]["fd_numu_lep_E"],
         df[df["class"] == "predicted"]["fd_numu_lep_E"],
         weights,
-        r'(Pred - True) / True $E_{\mathrm{lep}}^{\mathrm{reco}}$',
+        r'(Pred - True) / True FD $E_{\mathrm{lep}}^{\mathrm{reco}}$',
         "lepE_diff_plot.pdf",
         frac=True
     )
@@ -342,7 +382,7 @@ def main(args):
         df[df["class"] == "true"]["fd_numu_had_E"],
         df[df["class"] == "predicted"]["fd_numu_had_E"],
         weights,
-        r'(Pred - True) / True $E_{\mathrm{had}}^{\mathrm{reco}}$',
+        r'(Pred - True) / True FD $E_{\mathrm{had}}^{\mathrm{reco}}$',
         "hadE_diff_plot.pdf",
         frac=True
     )
@@ -421,6 +461,17 @@ def main(args):
         "ndfd_pi0E_hist2d_true_pred.pdf",
         logscale=True
     )
+    if args.sample_weights_plots:
+        # A bit hacky
+        train_dataset = NewPairedData(data_path=args.data_path, train=True)
+        df_train = get_df(train_dataset.data)
+        train_true_fd_numu_nu_Es = np.array(
+            df_train[df_train["class"] == "predicted"]["fd_numu_nu_E"]
+        )
+        train_weights = weights_hist[np.digitize(train_true_fd_numu_nu_Es, weights_bins) - 1]
+        make_sample_weights_plots(
+            weights_bins, weights_hist, train_weights, train_true_fd_numu_nu_Es
+        )
 
     get_stats(df[df["class"] == "true"], df[df["class"] == "predicted"], weights)
 
@@ -502,12 +553,21 @@ def parse_arguments():
         type=str, default=None,
         help="Apply training sample weighting from another experiment dir to validation plots"
     )
+    parser.add_argument(
+        "--sample_weights_plots",
+        action="store_true", help="Make plots of the original and reweighted spectra"
+    )
 
     args = parser.parse_args()
 
     if args.apply_sample_weights and args.apply_sample_weights_from is not None:
         raise ValueError(
             "Can only have one of --apply_sample_weights or --apply_sample_weights_from"
+        )
+    if (not args.apply_sample_weights and args.apply_sample_weights_from is None) and args.sample_weights_plots:
+        raise ValueError(
+            "Can only have --sample_weights_plots if"
+            "one of --apply_sample_weights or --apply_sample_weights_from"
         )
 
     return args
