@@ -350,42 +350,44 @@ def main(args):
         "nuE_diff_plot.pdf",
         frac=True
     )
-    dist_plot(
-        np.linspace(0.0, 16.0, 80), 
-        df[df["class"] == "true"]["fd_numu_lep_E"],
-        df[df["class"] == "predicted"]["fd_numu_lep_E"],
-        weights,
-        r'$E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
-        "lepE_dist_plot.pdf",
-        nd=df[df["class"] == "true"]["Elep_reco"]
-    )
-    diff_plot(
-        np.linspace(-1.0, 1.0, 100), 
-        df[df["class"] == "true"]["fd_numu_lep_E"],
-        df[df["class"] == "predicted"]["fd_numu_lep_E"],
-        weights,
-        r'(Pred - True) / True FD $E_{\mathrm{lep}}^{\mathrm{reco}}$',
-        "lepE_diff_plot.pdf",
-        frac=True
-    )
-    dist_plot(
-        np.linspace(0.0, 10.0, 100), 
-        df[df["class"] == "true"]["fd_numu_had_E"],
-        df[df["class"] == "predicted"]["fd_numu_had_E"],
-        weights,
-        r'$E_{\mathrm{had}}^{\mathrm{reco}}$ (GeV)',
-        "hadE_dist_plot.pdf",
-        nd=df[df["class"] == "true"]["Ev_reco"] - df[df["class"] == "true"]["Elep_reco"]
-    )
-    diff_plot(
-        np.linspace(-1.0, 1.0, 100), 
-        df[df["class"] == "true"]["fd_numu_had_E"],
-        df[df["class"] == "predicted"]["fd_numu_had_E"],
-        weights,
-        r'(Pred - True) / True FD $E_{\mathrm{had}}^{\mathrm{reco}}$',
-        "hadE_diff_plot.pdf",
-        frac=True
-    )
+    if "fd_numu_lep_E" in df.columns:
+        dist_plot(
+            np.linspace(0.0, 16.0, 80), 
+            df[df["class"] == "true"]["fd_numu_lep_E"],
+            df[df["class"] == "predicted"]["fd_numu_lep_E"],
+            weights,
+            r'$E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
+            "lepE_dist_plot.pdf",
+            nd=df[df["class"] == "true"]["Elep_reco"]
+        )
+        diff_plot(
+            np.linspace(-1.0, 1.0, 100), 
+            df[df["class"] == "true"]["fd_numu_lep_E"],
+            df[df["class"] == "predicted"]["fd_numu_lep_E"],
+            weights,
+            r'(Pred - True) / True FD $E_{\mathrm{lep}}^{\mathrm{reco}}$',
+            "lepE_diff_plot.pdf",
+            frac=True
+        )
+    if "fd_numu_had_E" in df.columns:
+        dist_plot(
+            np.linspace(0.0, 10.0, 100), 
+            df[df["class"] == "true"]["fd_numu_had_E"],
+            df[df["class"] == "predicted"]["fd_numu_had_E"],
+            weights,
+            r'$E_{\mathrm{had}}^{\mathrm{reco}}$ (GeV)',
+            "hadE_dist_plot.pdf",
+            nd=df[df["class"] == "true"]["Ev_reco"] - df[df["class"] == "true"]["Elep_reco"]
+        )
+        diff_plot(
+            np.linspace(-1.0, 1.0, 100), 
+            df[df["class"] == "true"]["fd_numu_had_E"],
+            df[df["class"] == "predicted"]["fd_numu_had_E"],
+            weights,
+            r'(Pred - True) / True FD $E_{\mathrm{had}}^{\mathrm{reco}}$',
+            "hadE_diff_plot.pdf",
+            frac=True
+        )
     dist2d_plot(
         70, ((0, 14), (0, 14)),
         np.array(df[df["class"] == "true"]["Ev_reco"]),
@@ -503,8 +505,10 @@ def main(args):
     common_kwargs = dict(hue='class', stat='density', element='step', common_norm=True, bins=bins, fill=False)
 
     sns.histplot(data=df, x='fd_numu_nu_E', ax=ax[0, 0], **common_kwargs, legend=True)
-    sns.histplot(data=df, x='fd_numu_had_E', ax=ax[0, 1], **common_kwargs, legend=False)
-    sns.histplot(data=df, x='fd_numu_lep_E', ax=ax[1, 0], **common_kwargs, legend=False)
+    if "fd_numu_had_E" in df.columns:
+        sns.histplot(data=df, x='fd_numu_had_E', ax=ax[0, 1], **common_kwargs, legend=False)
+    if "fd_numu_lep_E" in df.columns:
+        sns.histplot(data=df, x='fd_numu_lep_E', ax=ax[1, 0], **common_kwargs, legend=False)
 
     plt.tight_layout()
     plt.savefig(os.path.join(args.work_dir, "plot_3.pdf"))
