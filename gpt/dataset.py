@@ -95,6 +95,9 @@ class NewPairedData(Dataset):
             # --allcvn_reordered
             # cvn_scores = ['fd_nue_score', 'fd_nc_score', 'fd_nutau_score', 'fd_numu_score']
             # far_reco = ['fd_numu_lep_E', 'fd_numu_had_E', 'fd_numu_nu_E']
+            # -- minimal
+            # cvn_scores = ['fd_numu_score']
+            # far_reco = ['fd_numu_nu_E']
 
         self.cvn_scores = cvn_scores
         self.near_reco = near_reco
