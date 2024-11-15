@@ -166,13 +166,9 @@ class GPT(nn.Module):
         n_params = sum(p.numel() for p in self.transformer.parameters())
         print("number of parameters: %.2fM" % (n_params/1e6,))
 
-        if sample_weights_data is None:
-            self.sample_weighting = False
-        else:
-            self.sample_weighting = True
+        if sample_weights_data is not None:
             self.sample_weights_hist = sample_weights_data[0]
             self.sample_weights_bins = sample_weights_data[1]
-            self.sample_weights_var_idx = sample_weights_data[2]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -230,7 +226,7 @@ class GPT(nn.Module):
         optimizer = torch.optim.AdamW(optim_groups, lr=train_config.learning_rate, betas=train_config.betas)
         return optimizer
 
-    def forward(self, idx, targets=None):
+    def forward(self, idx, targets=None, sample_weights_var=None):
         device = idx.device
         b, t = idx.size()
 
@@ -244,7 +240,6 @@ class GPT(nn.Module):
         x = self.transformer.drop(tok_emb + pos_emb)
         for block in self.transformer.h:
             x = block(x)
-
 
         x = self.transformer.ln_f(x)
         output = self.lm_head(x) # (batch_size, n_objects, 3*n_gaussians)
@@ -262,7 +257,7 @@ class GPT(nn.Module):
         far_reco_mixture = self.compute_mixture(far_reco_output)
 
         if targets is not None:
-            if self.sample_weighting:
+            if sample_weights_var is not None:
                 # Should do this in init but dont have device there
                 sample_weights_hist = torch.tensor(
                     self.sample_weights_hist, dtype=float, device=device
@@ -272,10 +267,7 @@ class GPT(nn.Module):
                 )
                 # Finding training sample weights from histogram
                 sample_weights = sample_weights_hist[
-                    torch.bucketize(
-                        targets[:, self.sample_weights_var_idx].contiguous(), sample_weights_bins
-                    ) -
-                    1
+                    torch.bucketize(sample_weights_var, sample_weights_bins) - 1
                 ]
                 sample_weights = sample_weights.reshape(sample_weights.shape[0], 1)
                 # Apply sigmoid then training sample weights to log_probs to make loss

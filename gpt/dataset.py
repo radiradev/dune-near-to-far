@@ -13,11 +13,13 @@ class NewPairedData(Dataset):
                  data_path='data/ndfd_reco_only_cuts.noFDhasel_oldg4params.csv',
                  near_reco=None,
                  far_reco=None,
-                 train=True):
+                 train=True,
+                 sample_weight_var=None):
 
         super().__init__()
         self.data_path = data_path
         self.train = train
+        self.sample_weight_var = [] if sample_weight_var is None else [sample_weight_var]
 
         if near_reco is None:
             # -- default
@@ -109,8 +111,8 @@ class NewPairedData(Dataset):
     def load_data(self):
         df = pd.read_csv(self.data_path)
         # load in the near reco and far reco columsn
-
-        df = df[self.near_reco + self.cvn_scores + self.far_reco]
+        
+        df = df[self.near_reco + self.cvn_scores + self.far_reco + self.sample_weight_var]
         data = df.to_numpy().astype(np.float32)
         samples_in_train = 70_000
 
@@ -135,7 +137,12 @@ class NewPairedData(Dataset):
 
     def __getitem__(self, idx):
         sample = torch.tensor(self.data[idx], dtype=torch.float)
-        return sample[:-1], sample[len(self.near_reco):]
+        if not self.sample_weight_var:
+            return sample[:-1], sample[len(self.near_reco):]
+        else:
+            sample_weight_var_val = sample[-1]
+            sample = sample[:-1]
+            return sample[:-1], sample[len(self.near_reco):],  sample_weight_var_val
 
 
 class PairedData(Dataset):

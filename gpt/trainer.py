@@ -27,12 +27,13 @@ class Trainer:
         C.grad_norm_clip = 1.0
         return C
 
-    def __init__(self, config, model, train_dataset):
+    def __init__(self, config, model, train_dataset, sample_weighting=False):
         self.config = config
         self.model = model
         self.optimizer = None
         self.train_dataset = train_dataset
         self.callbacks = defaultdict(list)
+        self.sample_weighting = sample_weighting
 
         # determine the device we'll train on
         if config.device == 'auto':
@@ -82,10 +83,15 @@ class Trainer:
             print(f"Epoch {epoch}")
             for batch in train_loader:
                 batch = [t.to(self.device) for t in batch]
-                x, y = batch
 
-                # forward the model
-                logits, self.loss = model(x, y)
+                if self.sample_weighting:
+                    x, y, weight_var = batch
+                    # forward the model
+                    logits, self.loss = model(x, y, sample_weights_var=weight_var)
+                else:
+                    x, y = batch
+                    # forward the model
+                    logits, self.loss = model(x, y)
 
                 # backprop and update the parameters
                 model.zero_grad(set_to_none=True)

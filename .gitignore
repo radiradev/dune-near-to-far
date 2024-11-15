@@ -10,3 +10,5 @@
 *.pyo
 # ignore pycache
 gpt/__pycache__/
+
+/*.pdf

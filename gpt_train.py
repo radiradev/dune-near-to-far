@@ -40,48 +40,46 @@ eval_iters = 20
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 @torch.no_grad()
-def estimate_loss(val_loader):
+def estimate_loss(val_loader, sample_weighting):
     model.eval()
     losses = []
     for batch in (val_loader):
         batch = [t.to(device) for t in batch]
-        x, y = batch
-        logits, loss = model(x, y)
+        if sample_weighting:
+            x, y, weight_var = batch
+            logits, loss = model(x, y, sample_weights_var=weight_var)
+        else:
+            x, y = batch
+            logits, loss = model(x, y)
         losses.append(loss.item())
     loss = np.stack(losses).mean()
     model.train()
     return loss
 
-def get_reweight_scalefactors(train_fd_nu_E, reweight_dir, hack_mode):
-    if hack_mode == 1:
-        reweight_dir = "data/prism_nufit_osc_fd_erec"
-    if hack_mode == 2:
-        target_bins = np.concatenate([np.array([0.0]), np.linspace(0.2, 12.0, 119), np.array([120.0])])
-        target_hist = np.full(120, 1.0)
-        target_hist /= np.sum(target_hist)
-    else:
-        bins_file = glob.glob(os.path.join(reweight_dir, "*_bins.npy"))
-        assert len(bins_file) == 1, "Invalid reweight dir structure."
-        bins_file = bins_file[0]
-        target_bins = np.load(bins_file)
-        hist_file = glob.glob(os.path.join(reweight_dir, "*_hist.npy"))
-        assert len(hist_file) == 1, "Invalid reweight dir structure."
-        hist_file = hist_file[0]
-        target_hist = np.load(hist_file)
+def read_reweight_dir(reweight_dir):
+    bins_file = glob.glob(os.path.join(reweight_dir, "*_bins.npy"))
+    assert len(bins_file) == 1, "Invalid reweight dir structure."
+    weight_bins = np.load(bins_file[0])
+    hist_file = glob.glob(os.path.join(reweight_dir, "*_hist.npy"))
+    assert len(hist_file) == 1, "Invalid reweight dir structure."
+    weight_hist = np.load(hist_file[0])
+    var_file = glob.glob(os.path.join(reweight_dir, "*_var.txt"))
+    assert len(var_file) == 1, "Invalid reweight dir structure."
+    with open(var_file[0], "r") as f:
+        var_name = f.read().rstrip("\n")
+    return weight_bins, weight_hist, var_name
 
-    train_hist, train_bins = np.histogram(train_fd_nu_E, bins=target_bins)
+def get_reweight_scalefactors(train_sample_weight_var_data, target_bins, target_hist):
+    train_hist, train_bins = np.histogram(train_sample_weight_var_data, bins=target_bins)
     train_hist = train_hist.astype(float)
     for i in range(len(train_hist)):
         train_hist[i] /= (train_bins[i + 1] - train_bins[i])
     train_hist /= np.sum(train_hist)
     ratio_hist = target_hist / train_hist
 
-    if hack_mode == 1:
-        ratio_hist[-2:] = 1.0
-        ratio_hist[0] = 1.0
-    if hack_mode == 2:
-        ratio_hist[0] = 1.0
-        ratio_hist[-1] = 1.0
+    # Dont really care about <0.5GeV and >6GeV
+    ratio_hist[-2:] = 1.0
+    ratio_hist[0] = 1.0
 
     print("Training sample weights histogram is:")
     print(ratio_hist)
@@ -109,22 +107,13 @@ def parse_arguments():
         "--training_reweight",
         type=str, default=None,
         help=(
-            "Weight training samples to a flux."
-            "A dir containing two files for the bin edges (*_bins.npy) and count (*_hist.npy)."
-        )
-    )
-    parser.add_argument(
-        "--training_reweight_hack_mode",
-        type=int, default=None,
-        help=(
-            "1: Use osc weights but ignore very low and high energies "
-            "2: Weight to uniform except for very low and high energies"
+            "Weight training samples to a flux. "
+            "A dir containing three files: thebin edges (*_bins.npy), bin count (*_hist.npy), "
+            "and weighting variable name (*_var.txt)."
         )
     )
 
     args = parser.parse_args()
-
-    assert args.training_reweight is None or args.training_reweight_hack_mode is None
 
     return args
 
@@ -143,64 +132,73 @@ if __name__ == '__main__':
     set_seed(config.system.seed)
     print(config)
 
-    train_dataset = NewPairedData(data_path=args.data_path, train=True)
-    val_dataset = NewPairedData(data_path=args.data_path, train=False)
+    if args.training_reweight is not None:
+        print(f"Reweighting training using {args.training_reweight}")
+
+        weights_bins, weights_hist, sample_weight_var = read_reweight_dir(args.training_reweight)
+
+        train_dataset = NewPairedData(
+            data_path=args.data_path, train=True, sample_weight_var=sample_weight_var
+        )
+        val_dataset = NewPairedData(
+            data_path=args.data_path, train=False, sample_weight_var=sample_weight_var
+        )
+        config.model.block_size = train_dataset.get_block_size()
+        config.model.far_reco_size = train_dataset.get_far_reco_length()
+        config.model.scores_size = train_dataset.get_scores_length()
+
+        weights_hist, weights_bins = get_reweight_scalefactors(
+            train_dataset.data[:, -1], weights_bins, weights_hist
+        )
+        np.save(os.path.join(args.work_dir, "sampling_weights_hist.npy"), weights_hist)
+        np.save(os.path.join(args.work_dir, "sampling_weights_bins.npy"), weights_bins)
+        with open(os.path.join(args.work_dir, "sampling_weights_var.txt"), "w") as f:
+            f.write(sample_weight_var + "\n")
+
+        model = GPT(config.model, sample_weights_data=(weights_hist, weights_bins))
+
+        trainer = Trainer(config.trainer, model, train_dataset, sample_weighting=True)
+
+    else:
+        train_dataset = NewPairedData(data_path=args.data_path, train=True)
+        val_dataset = NewPairedData(data_path=args.data_path, train=False)
+
+        config.model.block_size = train_dataset.get_block_size()
+        config.model.far_reco_size = train_dataset.get_far_reco_length()
+        config.model.scores_size = train_dataset.get_scores_length()
+
+        model = GPT(config.model)
+
+        trainer = Trainer(config.trainer, model, train_dataset)
+
     val_loader = DataLoader(
             val_dataset,
             shuffle=False,
             pin_memory=True,
             batch_size=512,
             num_workers=4
-        )
-    # construct the model
-    # config.model.vocab_size = train_dataset.get_vocab_size()
-    config.model.block_size = train_dataset.get_block_size()
-    config.model.far_reco_size = train_dataset.get_far_reco_length()
-    config.model.scores_size = train_dataset.get_scores_length()
-    
-    if args.training_reweight is not None or args.training_reweight_hack_mode is not None:
-        print(f"Reweighting training using {args.training_reweight}")
-        fd_numu_nu_E_input_col_idx = (
-            len(train_dataset.near_reco) +
-            len(train_dataset.cvn_scores) +
-            train_dataset.far_reco.index("fd_numu_nu_E")
-        )
-        weights_hist, weights_bins = get_reweight_scalefactors(
-            train_dataset.data[:, fd_numu_nu_E_input_col_idx],
-            args.training_reweight,
-            args.training_reweight_hack_mode
-        )
-        np.save(os.path.join(args.work_dir, "sampling_weights_hist.npy"), weights_hist)
-        np.save(os.path.join(args.work_dir, "sampling_weights_bins.npy"), weights_bins)
-        model = GPT(
-            config.model,
-            sample_weights_data=(
-                weights_hist,
-                weights_bins,
-                fd_numu_nu_E_input_col_idx - len(train_dataset.near_reco)
-            )
-        )
-    else:
-        model = GPT(config.model)
+    )
 
-    # construct the trainer object
-    trainer = Trainer(config.trainer, model, train_dataset)
-    
     best_val_loss = torch.inf
     # iteration callback
     def batch_end_callback(trainer):
         global best_val_loss
 
         if trainer.iter_num % 10 == 0:
-            print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f}")
+            print(
+                f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: "
+                f"train loss {trainer.loss.item():.5f}"
+            )
 
         if trainer.iter_num % 300 == 0:
             # evaluate both the train and test score
-
-            print(f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: train loss {trainer.loss.item():.5f}")
+            print(
+                f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: "
+                f"train loss {trainer.loss.item():.5f}"
+            )
             model.eval()
-            with torch.no_grad():   
-                val_loss = estimate_loss(val_loader)
+            with torch.no_grad():
+                val_loss = estimate_loss(val_loader, args.training_reweight is not None)
                 print("Validation Loss:", val_loss)
 
             # save the latest model
@@ -216,3 +214,4 @@ if __name__ == '__main__':
 
     # run the optimization
     trainer.run()
+

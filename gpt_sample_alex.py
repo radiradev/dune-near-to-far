@@ -236,10 +236,40 @@ def main(args):
 
     true_df = pd.read_csv(args.data_path)
 
-    test_dataset = NewPairedData(data_path=args.data_path, train=False)
+    
+    if args.apply_sample_weights or args.apply_sample_weights_from is not None:
+        if args.apply_sample_weights:
+            weights_hist = np.load(os.path.join(args.work_dir, "sampling_weights_hist.npy"))
+            weights_bins = np.load(os.path.join(args.work_dir, "sampling_weights_bins.npy"))
+            with open(os.path.join(args.work_dir, "sampling_weights_var.txt"), "r") as f:
+                weights_var = f.read().rstrip("\n")
+        else:
+            weights_hist = np.load(
+                os.path.join(args.apply_sample_weights_from, "sampling_weights_hist.npy")
+            )
+            weights_bins = np.load(
+                os.path.join(args.apply_sample_weights_from, "sampling_weights_bins.npy")
+            )
+            with open(
+                os.path.join(args.apply_sample_weights_from, "sampling_weights_var.txt"), "r"
+            ) as f:
+                weights_var = f.read().rstrip("\n")
 
-    def get_df(pred_x, true_x=None):
-        col_names = test_dataset.near_reco + test_dataset.cvn_scores + test_dataset.far_reco
+        test_dataset = NewPairedData(
+            data_path=args.data_path, train=False, sample_weight_var=weights_var
+        )
+
+    else:
+        test_dataset = NewPairedData(data_path=args.data_path, train=False)
+
+    def get_df(pred_x, true_x=None, weights_var=None):
+        if weights_var is None:
+            col_names = test_dataset.near_reco + test_dataset.cvn_scores + test_dataset.far_reco
+        else:
+            col_names = (
+                test_dataset.near_reco + test_dataset.cvn_scores + test_dataset.far_reco +
+                [weights_var]
+            )
         assert len(col_names) == pred_x.shape[1]
         df = pd.DataFrame(pred_x, columns=col_names)
         df['class'] = 'predicted'
@@ -261,32 +291,29 @@ def main(args):
     for i in range(num_iter):
         idx = torch.tensor(test_dataset.data[:, :len(test_dataset.near_reco)], dtype=torch.float).to(device)[i*batch_size:(i+1)*batch_size]
         pred = model.generate(idx, device='cuda').cpu().numpy()
+        if args.apply_sample_weights or args.apply_sample_weights_from is not None:
+            pred = np.concatenate(
+                [pred, test_dataset.data[:, -1:][i*batch_size:(i+1)*batch_size]], axis=1
+            )
         pred_list.append(pred)
     pred = np.concatenate(pred_list)
-
-    df = get_df(pred, test_dataset.data[:len(pred), :])
 
     # ignore future warnings
     warnings.simplefilter(action='ignore', category=FutureWarning)
 
     if args.apply_sample_weights or args.apply_sample_weights_from is not None:
-        if args.apply_sample_weights:
-            weights_hist = np.load(os.path.join(args.work_dir, "sampling_weights_hist.npy"))
-            weights_bins = np.load(os.path.join(args.work_dir, "sampling_weights_bins.npy"))
-        else:
-            weights_hist = np.load(
-                os.path.join(args.apply_sample_weights_from, "sampling_weights_hist.npy")
-            )
-            weights_bins = np.load(
-                os.path.join(args.apply_sample_weights_from, "sampling_weights_bins.npy")
-            )
+        df = get_df(pred, test_dataset.data[:len(pred), :], weights_var=weights_var)
+
         args.work_dir = os.path.join(args.work_dir, "weighted_plots")
         if not os.path.exists(args.work_dir):
             os.makedirs(args.work_dir)
         print(f"Applying sampling weights, plots will be in {args.work_dir}")
-        true_fd_numu_nu_Es = np.array(df[df["class"] == "true"]["fd_numu_nu_E"])
-        weights = weights_hist[np.digitize(true_fd_numu_nu_Es, weights_bins) - 1]
+
+        true_sample_weights_var_data = np.array(df[df["class"] == "true"][weights_var])
+        weights = weights_hist[np.digitize(true_sample_weights_var_data, weights_bins) - 1]
+
     else:
+        df = get_df(pred, test_dataset.data[:len(pred), :])
         weights = None
 
     sns.set_context('talk')
@@ -465,14 +492,18 @@ def main(args):
     )
     if args.sample_weights_plots:
         # A bit hacky
-        train_dataset = NewPairedData(data_path=args.data_path, train=True)
-        df_train = get_df(train_dataset.data)
-        train_true_fd_numu_nu_Es = np.array(
-            df_train[df_train["class"] == "predicted"]["fd_numu_nu_E"]
+        train_dataset = NewPairedData(
+            data_path=args.data_path, train=True, sample_weight_var=weights_var
         )
-        train_weights = weights_hist[np.digitize(train_true_fd_numu_nu_Es, weights_bins) - 1]
+        # Passing the true data as the predicted
+        df_train = get_df(train_dataset.data, weights_var=weights_var)
+        true_sample_weights_var_data = np.array(
+            df_train[df_train["class"] == "predicted"][weights_var] # this is actually true
+        )
+        train_weights = weights_hist[np.digitize(true_sample_weights_var_data, weights_bins) - 1]
         make_sample_weights_plots(
-            weights_bins, weights_hist, train_weights, train_true_fd_numu_nu_Es
+            weights_bins, weights_hist, train_weights,
+            df_train[df_train["class"] == "predicted"]["fd_numu_nu_E"]
         )
 
     get_stats(df[df["class"] == "true"], df[df["class"] == "predicted"], weights)
