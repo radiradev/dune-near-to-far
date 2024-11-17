@@ -72,8 +72,10 @@ def read_reweight_dir(reweight_dir):
 def get_reweight_scalefactors(train_sample_weight_var_data, target_bins, target_hist):
     train_hist, train_bins = np.histogram(train_sample_weight_var_data, bins=target_bins)
     train_hist = train_hist.astype(float)
-    for i in range(len(train_hist)):
-        train_hist[i] /= (train_bins[i + 1] - train_bins[i])
+    # Fairly sure this is the wrong thing to do... the normalisation of each histogram before
+    # taking the ratio should be 1 / sum(counts) not 1 / sum(rates).
+    # for i in range(len(train_hist)):
+    #     train_hist[i] /= (train_bins[i + 1] - train_bins[i])
     train_hist /= np.sum(train_hist)
     ratio_hist = target_hist / train_hist
 
