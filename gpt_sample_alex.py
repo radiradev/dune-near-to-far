@@ -263,13 +263,14 @@ def main(args):
         test_dataset = NewPairedData(data_path=args.data_path, train=False)
 
     def get_df(pred_x, true_x=None, weights_var=None):
-        if weights_var is None:
-            col_names = test_dataset.near_reco + test_dataset.cvn_scores + test_dataset.far_reco
-        else:
-            col_names = (
-                test_dataset.near_reco + test_dataset.cvn_scores + test_dataset.far_reco +
-                [weights_var]
-            )
+        col_names = test_dataset.near_reco + test_dataset.cvn_scores + test_dataset.far_reco
+        if weights_var is not None:
+            if weights_var in col_names:
+                pred_x = pred_x[:, :-1]
+                if true_x is not None:
+                    true_x = true_x[:, :-1]
+            else:
+                col_names += [weights_var]
         assert len(col_names) == pred_x.shape[1]
         df = pd.DataFrame(pred_x, columns=col_names)
         df['class'] = 'predicted'
