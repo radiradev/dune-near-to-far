@@ -69,6 +69,25 @@ def read_reweight_dir(reweight_dir):
         var_name = f.read().rstrip("\n")
     return weight_bins, weight_hist, var_name
 
+# Reweights s.t. the 0.5-6Gev region is flat
+def get_reweight_uniform(train_sample_weight_var_data):
+    bins = np.arange(0.5, 6.25, 0.25)
+    train_hist, _ = np.histogram(train_sample_weight_var_data, bins=bins)
+    train_hist = train_hist.astype(float)
+    train_hist /= np.sum(train_hist)
+    target_hist = np.ones_like(train_hist).astype(float)
+    target_hist /= np.sum(target_hist)
+    ratio_hist = target_hist / train_hist
+
+    bins = np.concatenate([[0.0], bins, [10.0, 120.0]])
+    ratio_hist = np.concatenate([[1.0], ratio_hist, [1.0, 1.0]])
+
+    print("Training sample weights histogram is:")
+    print(ratio_hist)
+    print(bins)
+
+    return ratio_hist, bins
+
 def get_reweight_scalefactors(train_sample_weight_var_data, target_bins, target_hist):
     train_hist, train_bins = np.histogram(train_sample_weight_var_data, bins=target_bins)
     train_hist = train_hist.astype(float)
@@ -114,8 +133,16 @@ def parse_arguments():
             "and weighting variable name (*_var.txt)."
         )
     )
+    parser.add_argument(
+        "--uniform_reweight",
+        action="store_true",
+        help="Reweight such that in the range 0.5-6.0 GeV the number of events is uniform"
+    )
 
     args = parser.parse_args()
+
+    if args.uniform_reweight and args.training_reweight is not None:
+        raise ValueError("Can only have one of --uniform_reweight or --training_reweight")
 
     return args
 
@@ -134,10 +161,17 @@ if __name__ == '__main__':
     set_seed(config.system.seed)
     print(config)
 
-    if args.training_reweight is not None:
+    reweighting = args.training_reweight is not None or args.uniform_reweight
+
+    if reweighting:
         print(f"Reweighting training using {args.training_reweight}")
 
-        weights_bins, weights_hist, sample_weight_var = read_reweight_dir(args.training_reweight)
+        if args.uniform_reweight:
+            sample_weight_var = "Ev"
+        else:
+            weights_bins, weights_hist, sample_weight_var = read_reweight_dir(
+                args.training_reweight
+            )
 
         train_dataset = NewPairedData(
             data_path=args.data_path, train=True, sample_weight_var=sample_weight_var
@@ -149,9 +183,12 @@ if __name__ == '__main__':
         config.model.far_reco_size = train_dataset.get_far_reco_length()
         config.model.scores_size = train_dataset.get_scores_length()
 
-        weights_hist, weights_bins = get_reweight_scalefactors(
-            train_dataset.data[:, -1], weights_bins, weights_hist
-        )
+        if args.uniform_reweight:
+            weights_hist, weights_bins = get_reweight_uniform(train_dataset.data[:, -1])
+        else:
+            weights_hist, weights_bins = get_reweight_scalefactors(
+                train_dataset.data[:, -1], weights_bins, weights_hist
+            )
         np.save(os.path.join(args.work_dir, "sampling_weights_hist.npy"), weights_hist)
         np.save(os.path.join(args.work_dir, "sampling_weights_bins.npy"), weights_bins)
         with open(os.path.join(args.work_dir, "sampling_weights_var.txt"), "w") as f:
@@ -200,7 +237,7 @@ if __name__ == '__main__':
             )
             model.eval()
             with torch.no_grad():
-                val_loss = estimate_loss(val_loader, args.training_reweight is not None)
+                val_loss = estimate_loss(val_loader, reweighting)
                 print("Validation Loss:", val_loss)
 
             # save the latest model
