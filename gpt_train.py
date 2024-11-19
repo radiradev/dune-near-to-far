@@ -124,7 +124,8 @@ def parse_arguments():
         )
     )
 
-    parser.add_argument(
+    g = parser.add_mutually_exclusive_group()
+    g.add_argument(
         "--training_reweight",
         type=str, default=None,
         help=(
@@ -133,16 +134,21 @@ def parse_arguments():
             "and weighting variable name (*_var.txt)."
         )
     )
-    parser.add_argument(
-        "--uniform_reweight",
+    g.add_argument(
+        "--uniform_reweight_Ev",
         action="store_true",
-        help="Reweight such that in the range 0.5-6.0 GeV the number of events is uniform"
+        help="Reweight such that in the range 0.5-6.0 GeV the number of events is uniform in Ev"
+    )
+    g.add_argument(
+        "--uniform_reweight_fd_numu_nu_E",
+        action="store_true",
+        help=(
+            "Reweight such that in the range 0.5-6.0 GeV the number of events is uniform in"
+            "fd_numu_nu_E"
+        )
     )
 
     args = parser.parse_args()
-
-    if args.uniform_reweight and args.training_reweight is not None:
-        raise ValueError("Can only have one of --uniform_reweight or --training_reweight")
 
     return args
 
@@ -161,13 +167,19 @@ if __name__ == '__main__':
     set_seed(config.system.seed)
     print(config)
 
-    reweighting = args.training_reweight is not None or args.uniform_reweight
+    reweighting = (
+        args.training_reweight is not None or
+        args.uniform_reweight_Ev or
+        args.uniform_reweight_fd_numu_nu_E
+    )
 
     if reweighting:
         print(f"Reweighting training using {args.training_reweight}")
 
-        if args.uniform_reweight:
+        if args.uniform_reweight_Ev:
             sample_weight_var = "Ev"
+        elif argss.uniform_reweight_fd_numu_nu_E:
+            sample_weight_var = "fd_numu_nu_E"
         else:
             weights_bins, weights_hist, sample_weight_var = read_reweight_dir(
                 args.training_reweight
@@ -183,7 +195,7 @@ if __name__ == '__main__':
         config.model.far_reco_size = train_dataset.get_far_reco_length()
         config.model.scores_size = train_dataset.get_scores_length()
 
-        if args.uniform_reweight:
+        if args.uniform_reweight_Ev or args.uniform_reweight_fd_numu_nu_E:
             weights_hist, weights_bins = get_reweight_uniform(train_dataset.data[:, -1])
         else:
             weights_hist, weights_bins = get_reweight_scalefactors(
