@@ -510,7 +510,7 @@ def main(args):
         make_sample_weights_plots(
             weights_bins, weights_hist, train_weights,
             true_sample_weights_var_data,
-            "Ev"
+            weights_var
         )
 
     get_stats(df[df["class"] == "true"], df[df["class"] == "predicted"], weights)

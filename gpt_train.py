@@ -178,7 +178,7 @@ if __name__ == '__main__':
 
         if args.uniform_reweight_Ev:
             sample_weight_var = "Ev"
-        elif argss.uniform_reweight_fd_numu_nu_E:
+        elif args.uniform_reweight_fd_numu_nu_E:
             sample_weight_var = "fd_numu_nu_E"
         else:
             weights_bins, weights_hist, sample_weight_var = read_reweight_dir(
