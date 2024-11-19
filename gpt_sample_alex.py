@@ -178,14 +178,14 @@ def get_stats(true_df, pred_df, weights):
     with open(os.path.join(args.work_dir, "metrics.yml"), "w") as f:
         yaml.dump(metrics, f)
 
-def make_sample_weights_plots(bins, ratio_hist, weights, fd_numu_nu_E):
+def make_sample_weights_plots(bins, ratio_hist, weights, fd_numu_nu_E, var_name):
     fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
     ax.hist(fd_numu_nu_E, bins=bins, histtype="step", density=True)
     ax.set_title("Original (ND Beam Flux) Spectrum", fontsize=18, pad=15)
     ax.set_xlabel(r'FD $E_\nu^{\mathrm{reco}}$ (GeV)', fontsize=16, loc="right")
     ax.set_ylabel("Density", fontsize=16, loc="top")
     ax.set_xlim(0.0, 12.0)
-    plt.savefig(os.path.join(args.work_dir, "original_spectrum.pdf"))
+    plt.savefig(os.path.join(args.work_dir, "original_spectrum_" + var_name + ".pdf"))
     plt.close()
 
     fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
@@ -198,7 +198,7 @@ def make_sample_weights_plots(bins, ratio_hist, weights, fd_numu_nu_E):
     ax.set_ylabel("Weights", fontsize=16, loc="top")
     ax.set_xlim(0.0, 12.0)
     ax.set_ylim(0.0, 3.0)
-    plt.savefig(os.path.join(args.work_dir, "weights_spectrum.pdf"))
+    plt.savefig(os.path.join(args.work_dir, "weights_spectrum_" + var_name + ".pdf"))
     plt.close()
 
     fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
@@ -207,7 +207,7 @@ def make_sample_weights_plots(bins, ratio_hist, weights, fd_numu_nu_E):
     ax.set_xlabel(r'FD $E_\nu^{\mathrm{reco}}$ (GeV)', fontsize=16, loc="right")
     ax.set_ylabel("Density", fontsize=16, loc="top")
     ax.set_xlim(0.0, 12.0)
-    plt.savefig(os.path.join(args.work_dir, "weighted_spectrum.pdf"))
+    plt.savefig(os.path.join(args.work_dir, "weighted_spectrum_" + var_name + ".pdf"))
     plt.close()
 
 def main(args):
@@ -504,7 +504,13 @@ def main(args):
         train_weights = weights_hist[np.digitize(true_sample_weights_var_data, weights_bins) - 1]
         make_sample_weights_plots(
             weights_bins, weights_hist, train_weights,
-            df_train[df_train["class"] == "predicted"]["fd_numu_nu_E"]
+            df_train[df_train["class"] == "predicted"]["fd_numu_nu_E"],
+            "fd_numu_nu_E"
+        )
+        make_sample_weights_plots(
+            weights_bins, weights_hist, train_weights,
+            true_sample_weights_var_data,
+            "Ev"
         )
 
     get_stats(df[df["class"] == "true"], df[df["class"] == "predicted"], weights)
