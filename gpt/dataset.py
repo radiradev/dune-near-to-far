@@ -46,10 +46,18 @@ class NewPairedData(Dataset):
             #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             # ]
             # -- noN_noleppdg # NOTE I accidently left 'reco_lepton_pdg' in here for some experiments
+            # near_reco = [
+            #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
+            #     'Ev_reco', 'Elep_reco', 'theta_reco',
+            #     'reco_numu', 'reco_nc', 'reco_nue',
+            #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
+            # ]
+            # -- noN_sensible
             near_reco = [
-                'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
+                'nP', 'nipipm', 'nikpm', 'nipi0', 'nik0', 'niem', 'niother',
+                'eRecoP', 'eRecoPipm', 'eRecoPi0', 'eRecoOther',
                 'Ev_reco', 'Elep_reco', 'theta_reco',
-                'reco_numu', 'reco_nc', 'reco_nue',
+                'muon_tracker', 'muon_contained', 'Ehad_veto',
                 'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             ]
             # -- noN_trackercontained
@@ -83,7 +91,10 @@ class NewPairedData(Dataset):
             # cvn_scores = ['fd_numu_score']#, 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
             # far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E'] #,'fd_nue_lep_E', 'fd_numu_nu_E', 'fd_nue_nu_E']
             # -- allcvn
-            cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
+            # cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
+            # far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E']
+            # -- 1cvn
+            cvn_scores = ['fd_numu_score']
             far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E']
             # -- allcvn_fdnuElast
             # cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']

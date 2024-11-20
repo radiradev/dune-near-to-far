@@ -30,6 +30,10 @@ def convert_to_df(file):
 
         run_id = extract_run_id(key)
         assert len(nd_df) == len(fd_df), f'Length mismatch for {key}'
+        
+        nd_df["eRecoPipm"] = nd_df["eRecoPip"] + nd_df["eRecoPim"]
+        nd_df["nipipm"] = nd_df["nipip"] + nd_df["nipim"]
+        nd_df["nikpm"] = nd_df["nikp"] + nd_df["nikm"]
 
         # joint the two dataframes
         # add fd prefix to the columns corresponding to FD vars
