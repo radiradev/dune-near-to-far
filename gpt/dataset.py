@@ -14,12 +14,16 @@ class NewPairedData(Dataset):
                  near_reco=None,
                  far_reco=None,
                  train=True,
-                 sample_weight_var=None):
+                 sample_weight_var=None,
+                 uniform_resample=False):
 
         super().__init__()
         self.data_path = data_path
         self.train = train
         self.sample_weight_var = [] if sample_weight_var is None else [sample_weight_var]
+        if uniform_resample:
+            self.sample_weight_var = ["Ev"]
+        self.uniform_resample = uniform_resample
 
         if near_reco is None:
             # -- default
@@ -119,10 +123,14 @@ class NewPairedData(Dataset):
 
         self.block_size = len(near_reco) + len(cvn_scores) + len(far_reco) + 1
 
+        if self.uniform_resample:
+            self.Evs, self.Evs_sorted, self.idxs_sorted = self._get_idx_true_energies()
+            self.data = self.data[:, :-1] # Get rid of the sample weight column now
+
     def load_data(self):
         df = pd.read_csv(self.data_path)
         # load in the near reco and far reco columsn
-        
+
         df = df[self.near_reco + self.cvn_scores + self.far_reco + self.sample_weight_var]
         data = df.to_numpy().astype(np.float32)
         samples_in_train = 70_000
@@ -134,6 +142,13 @@ class NewPairedData(Dataset):
 
         return data
 
+    def _get_idx_true_energies(self):
+        Evs = np.array(self.data[:, -1])
+        idxs = np.argsort(Evs)
+        Evs_sorted = Evs[idxs]
+
+        return Evs, Evs_sorted, idxs
+
     def get_scores_length(self):
         return len(self.cvn_scores)
 
@@ -143,10 +158,32 @@ class NewPairedData(Dataset):
     def get_block_size(self):
         return self.block_size
 
+    def _uniform_sample_Ev(self):
+        Ev = np.random.uniform(0.5, 6.0)
+        idx = np.searchsorted(self.Evs_sorted, Ev, side="left")
+        if (
+            idx > 0 and
+            (
+                idx == len(self.Evs_sorted) or
+                abs(Ev - self.Evs_sorted[idx - 1]) < abs(Ev - self.Evs_sorted[idx])
+            )
+        ):
+            return self.idxs_sorted[idx - 1]
+        else:
+            return self.idxs_sorted[idx]
+
     def __len__(self):
         return len(self.data) - self.block_size
 
     def __getitem__(self, idx):
+        if self.uniform_resample:
+            if self.Evs[idx] < 0.5 or self.Evs[idx] > 6.0:
+                new_idx = idx
+            else:
+                new_idx = self._uniform_sample_Ev()
+            sample = torch.tensor(self.data[new_idx], dtype=torch.float)
+            return sample[:-1], sample[len(self.near_reco):]
+
         sample = torch.tensor(self.data[idx], dtype=torch.float)
         if not self.sample_weight_var:
             return sample[:-1], sample[len(self.near_reco):]

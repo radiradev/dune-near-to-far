@@ -146,6 +146,11 @@ def parse_arguments():
         action="store_true",
         help="Reweight such that in most energies the number of events is uniform in fd_numu_nu_E"
     )
+    g.add_argument(
+        "--uniform_resampling",
+        action="store_true",
+        help="Sample data at load time with a flat energy"
+    )
 
     args = parser.parse_args()
 
@@ -210,7 +215,9 @@ if __name__ == '__main__':
         trainer = Trainer(config.trainer, model, train_dataset, sample_weighting=True)
 
     else:
-        train_dataset = NewPairedData(data_path=args.data_path, train=True)
+        train_dataset = NewPairedData(
+            data_path=args.data_path, train=True, uniform_resample=args.uniform_resampling
+        )
         val_dataset = NewPairedData(data_path=args.data_path, train=False)
 
         config.model.block_size = train_dataset.get_block_size()
