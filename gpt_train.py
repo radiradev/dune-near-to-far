@@ -69,10 +69,10 @@ def read_reweight_dir(reweight_dir):
         var_name = f.read().rstrip("\n")
     return weight_bins, weight_hist, var_name
 
-# Reweights s.t. the 0.25-12 GeV region is flat and the rest is almost flat
-# (very large weights # at <0.25 and >12GeV would not be good)
+# Reweights s.t. the most energies are flat and the rest is almost flat
+# (very large weights # at the extreme energies can make training unstable)
 def get_reweight_uniform(train_sample_weight_var_data):
-    bins = np.arange(0.25, 12.25, 0.25)
+    bins = np.arange(0.0, 14.25, 0.25)
     train_hist, _ = np.histogram(train_sample_weight_var_data, bins=bins)
     train_hist = train_hist.astype(float)
     train_hist /= np.sum(train_hist)
@@ -80,8 +80,9 @@ def get_reweight_uniform(train_sample_weight_var_data):
     target_hist /= np.sum(target_hist)
     ratio_hist = target_hist / train_hist
 
-    bins = np.concatenate([[0.0], bins, [120.0]])
-    ratio_hist = np.concatenate([[np.max(ratio_hist)], ratio_hist, [np.max(ratio_hist)]])
+    bins = np.concatenate([bins, [120.0]])
+    ratio_hist = np.concatenate([ratio_hist, [np.max(ratio_hist)]])
+    ratio_hist = np.clip(ratio_hist, 0.0, 20.0)
 
     print("Training sample weights histogram is:")
     print(ratio_hist)
