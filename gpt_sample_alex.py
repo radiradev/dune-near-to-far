@@ -82,6 +82,68 @@ def diff_plot(bins, true, pred, weights, xlabel, savename, frac=False, fit=True,
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
 
+def diff_plot_by_var(bins, true, pred, var, xlabel, savename, clip=16):
+    if clip is not None:
+        pred = pred.copy()
+        pred[pred > clip] = clip
+
+    x, xerr, y, yerr = [], [], [], []
+    for bin_l, bin_u in zip(bins[:-1], bins[1:]):
+        mask = (var > bin_l) & (var < bin_u)
+        sel_true = true[mask]
+        sel_pred = pred[mask]
+        frac_diffs = (sel_pred - sel_true) / sel_true
+
+        x.append((bin_u + bin_l) / 2)
+        xerr.append((bin_u - bin_l) / 2)
+        y.append(np.mean(frac_diffs))
+        yerr.append(np.std(frac_diffs) / 2)
+
+    fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
+    ax.hlines(0.0, xmin=0.0, xmax=12.0, linewidth=0.5)
+    ax.errorbar(
+        x, y,
+        yerr=yerr, xerr=xerr, c="b", linestyle="none", elinewidth=0.6, marker="o", markersize=2.5
+    )
+    ax.set_xlabel(xlabel, fontsize=16, loc="right")
+    ax.set_ylabel("Frac. Diff.", fontsize=16, loc="top")
+    ax.set_xlim(0.0, 12.0)
+    ax.set_ylim(-1.0, 1.0)
+    plt.savefig(os.path.join(args.work_dir, savename))
+    plt.close()
+
+def diff2d_plot_by_var(
+    n_bins, range_bins, true, pred, var, xlabel, savename, clip=60, logscale=False
+):
+    if clip is not None:
+        pred = pred.copy()
+        pred[pred > clip] = clip
+
+    hist2d, bins_x, bins_y = np.histogram2d(
+        var, (pred - true) / true, bins=(n_bins, 100), range=(range_bins, (-1.0, 1.0))
+    )
+    normaliser = np.sum(hist2d, axis=1)[:, None]
+    normaliser[normaliser == 0] = 1
+    hist2d = hist2d / normaliser
+    fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
+    extent = [bins_x[0], bins_x[-1], bins_y[0], bins_y[-1]]
+    vmin = np.min(hist2d[hist2d != 0])
+    vmax = np.percentile(hist2d, 99)
+    if logscale:
+        norm = matplotlib.colors.LogNorm(vmin=vmin, vmax=vmax)
+    else:
+        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+    im = ax.imshow(
+        np.ma.masked_where(hist2d == 0, hist2d).T,
+        origin="lower", interpolation="none", extent=extent, norm=norm,cmap="jet", aspect="auto"
+    )
+    ax.hlines(0.0, xmin=bins_x[0], xmax=bins_x[-1], linewidth=0.5, color="k", alpha=0.6)
+    ax.set_xlabel(xlabel, fontsize=16, loc="right")
+    ax.set_ylabel("Frac Diff.", fontsize=16, loc="top")
+    cb = fig.colorbar(im, ax=[ax], orientation="vertical", location="right")
+    plt.savefig(os.path.join(args.work_dir, savename))
+    plt.close()
+
 def dist_plot(bins, true, pred, weights, xlabel, savename, nd=None):
     fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
     if nd is not None:
@@ -236,7 +298,6 @@ def main(args):
 
     true_df = pd.read_csv(args.data_path)
 
-    
     if args.apply_sample_weights or args.apply_sample_weights_from is not None:
         if args.apply_sample_weights:
             weights_hist = np.load(os.path.join(args.work_dir, "sampling_weights_hist.npy"))
@@ -329,7 +390,7 @@ def main(args):
 
     # My distribution and residual plots
     dist_plot(
-        np.linspace(0.0, 1.0, 50), 
+        np.linspace(0.0, 1.0, 50),
         df[df["class"] == "true"]["fd_numu_score"],
         df[df["class"] == "predicted"]["fd_numu_score"],
         weights,
@@ -337,7 +398,7 @@ def main(args):
         "cvn_dist_plot.pdf"
     )
     diff_plot(
-        np.linspace(-0.25, 0.25, 100), 
+        np.linspace(-0.25, 0.25, 100),
         df[df["class"] == "true"]["fd_numu_score"],
         df[df["class"] == "predicted"]["fd_numu_score"],
         weights,
@@ -345,7 +406,7 @@ def main(args):
         "cvn_diff_plot.pdf"
     )
     dist_plot(
-        np.linspace(0.0, 16.0, 80), 
+        np.linspace(0.0, 16.0, 80),
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         weights,
@@ -354,7 +415,7 @@ def main(args):
         nd=df[df["class"] == "true"]["Ev_reco"]
     )
     dist_plot(
-        np.linspace(0.0, 8.0, 80), 
+        np.linspace(0.0, 8.0, 80),
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         weights,
@@ -362,7 +423,7 @@ def main(args):
         "nuE_dist_fineishbinning_plot.pdf"
     )
     dist_plot(
-        np.linspace(0.0, 6.0, 150), 
+        np.linspace(0.0, 6.0, 150),
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         weights,
@@ -370,7 +431,7 @@ def main(args):
         "nuE_dist_finebinning_plot.pdf"
     )
     diff_plot(
-        np.linspace(-1.0, 1.0, 100), 
+        np.linspace(-1.0, 1.0, 100),
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         weights,
@@ -378,9 +439,54 @@ def main(args):
         "nuE_diff_plot.pdf",
         frac=True
     )
+    diff_plot_by_var(
+        np.concatenate([
+            [0.0],
+            np.arange(0.5, 2.06, 0.04),
+            np.arange(2.1, 3.14, 0.08),
+            np.arange(3.16, 4.16, 0.1),
+            [4.5, 5.0, 6.0, 10.0, 120.0]
+        ]),
+        df[df["class"] == "true"]["fd_numu_nu_E"],
+        df[df["class"] == "predicted"]["fd_numu_nu_E"],
+        df[df["class"] == "true"]["fd_numu_nu_E"],
+        "fd_numu_nu_E",
+        "diff_by_fd_numu_nu_E.pdf"
+    )
+    diff2d_plot_by_var(
+        120, (0.0, 12.0),
+        df[df["class"] == "true"]["fd_numu_nu_E"],
+        df[df["class"] == "predicted"]["fd_numu_nu_E"],
+        df[df["class"] == "true"]["fd_numu_nu_E"],
+        "fd_numu_nu_E",
+        "diff2d_by_fd_numu_nu_E.pdf"
+    )
+    if args.apply_sample_weights or args.apply_sample_weights_from is not None:
+        diff_plot_by_var(
+            np.concatenate([
+                [0.0],
+                np.arange(0.5, 2.06, 0.04),
+                np.arange(2.1, 3.14, 0.08),
+                np.arange(3.16, 4.16, 0.1),
+                [4.5, 5.0, 6.0, 10.0, 120.0]
+            ]),
+            df[df["class"] == "true"]["fd_numu_nu_E"],
+            df[df["class"] == "predicted"]["fd_numu_nu_E"],
+            df[df["class"] == "true"][weights_var],
+            weights_var,
+            f"diff_by_{weights_var}.pdf"
+        )
+        diff2d_plot_by_var(
+            120, (0.0, 12.0),
+            df[df["class"] == "true"]["fd_numu_nu_E"],
+            df[df["class"] == "predicted"]["fd_numu_nu_E"],
+            df[df["class"] == "true"][weights_var],
+            weights_var,
+            f"diff2d_by_{weights_var}.pdf"
+        )
     if "fd_numu_lep_E" in df.columns:
         dist_plot(
-            np.linspace(0.0, 16.0, 80), 
+            np.linspace(0.0, 16.0, 80),
             df[df["class"] == "true"]["fd_numu_lep_E"],
             df[df["class"] == "predicted"]["fd_numu_lep_E"],
             weights,
@@ -389,7 +495,7 @@ def main(args):
             nd=df[df["class"] == "true"]["Elep_reco"]
         )
         diff_plot(
-            np.linspace(-1.0, 1.0, 100), 
+            np.linspace(-1.0, 1.0, 100),
             df[df["class"] == "true"]["fd_numu_lep_E"],
             df[df["class"] == "predicted"]["fd_numu_lep_E"],
             weights,
@@ -399,7 +505,7 @@ def main(args):
         )
     if "fd_numu_had_E" in df.columns:
         dist_plot(
-            np.linspace(0.0, 10.0, 100), 
+            np.linspace(0.0, 10.0, 100),
             df[df["class"] == "true"]["fd_numu_had_E"],
             df[df["class"] == "predicted"]["fd_numu_had_E"],
             weights,
@@ -408,7 +514,7 @@ def main(args):
             nd=df[df["class"] == "true"]["Ev_reco"] - df[df["class"] == "true"]["Elep_reco"]
         )
         diff_plot(
-            np.linspace(-1.0, 1.0, 100), 
+            np.linspace(-1.0, 1.0, 100),
             df[df["class"] == "true"]["fd_numu_had_E"],
             df[df["class"] == "predicted"]["fd_numu_had_E"],
             weights,
@@ -461,17 +567,23 @@ def main(args):
         "ndfd_protonE_hist2d_true_pred.pdf",
         logscale=True
     )
-    dist2d_plot(
-        (40, 70), ((0, 3), (0, 14)),
-        (
+    if "eRecoPipm" in df.columns:
+        true_x = np.array(df[df["class"] == "true"]["eRecoPipm"])
+        pred_x = np.array(df[df["class"] == "predicted"]["eRecoPipm"])
+    else:
+        true_x = (
             np.array(df[df["class"] == "true"]["eRecoPip"]) +
             np.array(df[df["class"] == "true"]["eRecoPim"])
-        ),
-        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
-        (
+        )
+        pred_x = (
             np.array(df[df["class"] == "predicted"]["eRecoPip"]) +
             np.array(df[df["class"] == "predicted"]["eRecoPim"])
-        ),
+        )
+    dist2d_plot(
+        (40, 70), ((0, 3), (0, 14)),
+        true_x,
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        pred_x,
         np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
         weights,
         r'ND $E_{\pi^\pm}^{\mathrm{reco}}$ (GeV)',

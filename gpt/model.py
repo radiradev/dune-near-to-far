@@ -273,12 +273,14 @@ class GPT(nn.Module):
                 # Apply sigmoid then training sample weights to log_probs to make loss
                 scores_loss = -scores_mixture.log_prob(targets[:, :self.scores_size])
                 scores_loss = torch.nn.functional.sigmoid(scores_loss) * sample_weights
+                # scores_loss = scores_loss * sample_weights
                 scores_loss = scores_loss.mean()
                 # Try to normalise the gradient for each mini-batch a bit, not sure if this
                 # is a sensisble thing to do though...
                 # scores_loss = scores_loss * (torch.sum(sample_weights) / sample_weights.shape[0])
                 far_reco_loss = -far_reco_mixture.log_prob(targets[:, self.scores_size:])
                 far_reco_loss = torch.nn.functional.sigmoid(far_reco_loss) * sample_weights
+                # far_reco_loss = far_reco_loss * sample_weights
                 far_reco_loss = far_reco_loss.mean()
                 # far_reco_loss = far_reco_loss * (torch.sum(sample_weights) / sample_weights.shape[0])
                 loss = (scores_loss + far_reco_loss) / 2
