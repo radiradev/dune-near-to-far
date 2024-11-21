@@ -147,9 +147,24 @@ def parse_arguments():
         help="Reweight such that in most energies the number of events is uniform in fd_numu_nu_E"
     )
     g.add_argument(
-        "--uniform_resampling",
+        "--uniform_resampling_Ev",
         action="store_true",
-        help="Sample data at load time with a flat energy"
+        help="Sample data at load time with a flat Ev"
+    )
+    g.add_argument(
+        "--uniform_resampling_fd_numu_nu_E",
+        action="store_true",
+        help="Sample data at load time with a flat fd_numu_nu_E"
+    )
+    g.add_argument(
+        "--uniform_resampling_ndcaf_Ev",
+        action="store_true",
+        help="Sample data at load time with the overall Ev from the ND CAFS"
+    )
+    g.add_argument(
+        "--uniform_resampling_osc_Ev",
+        action="store_true",
+        help="Sample data at load time with the oscillated Ev (target of the PRISM LC)"
     )
 
     args = parser.parse_args()
@@ -176,6 +191,27 @@ if __name__ == '__main__':
         args.uniform_reweight_Ev or
         args.uniform_reweight_fd_numu_nu_E
     )
+    
+    if args.uniform_resampling_Ev:
+        uniform_resample_data = (np.array([0.5, 6.0]), np.array([0.5]), "Ev")
+    elif args.uniform_resampling_fd_numu_nu_E:
+        uniform_resample_data = (np.array([0.5, 6.0]), np.array([0.5]), "fd_numu_nu_E")
+    elif args.uniform_resampling_ndcaf_Ev:
+        bins = np.load("data/ndcafs_all_oa_trueE/allCAF_Ev_oaall_bins.npy")
+        hist = np.load("data/ndcafs_all_oa_trueE/allCAF_Ev_oaall_hist.npy") # expect bin counts not rate
+        hist = hist[(bins >= 0.5) & (bins <= 6.0)]
+        bins = bins[(bins >= 0.5) & (bins <= 6.0)]
+        hist /= np.sum(hist)
+        uniform_resample_data = (bins, hist, "Ev")
+    elif args.uniform_resampling_osc_Ev:
+        bins = np.load("data/prism_nufit_target_fd_flux_norate/FDTargetFlux_bins.npy")
+        hist = np.load("data/prism_nufit_target_fd_flux_norate/FDTargetFlux_hist.npy") # expect bin counts not rate
+        hist = hist[(bins >= 0.5) & (bins <= 6.0)]
+        bins = bins[(bins >= 0.5) & (bins <= 6.0)]
+        hist /= np.sum(hist)
+        uniform_resample_data = (bins, hist, "Ev")
+    else:
+        uniform_resample_data = None
 
     if reweighting:
         print(f"Reweighting training using {args.training_reweight}")
@@ -216,7 +252,7 @@ if __name__ == '__main__':
 
     else:
         train_dataset = NewPairedData(
-            data_path=args.data_path, train=True, uniform_resample=args.uniform_resampling
+            data_path=args.data_path, train=True, uniform_resample=uniform_resample_data
         )
         val_dataset = NewPairedData(data_path=args.data_path, train=False)
 
