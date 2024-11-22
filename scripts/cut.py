@@ -35,6 +35,11 @@ def convert_to_df(file):
         nd_df["nipipm"] = nd_df["nipip"] + nd_df["nipim"]
         nd_df["nikpm"] = nd_df["nikp"] + nd_df["nikm"]
 
+        fd_vertices["x_vert_fv_mindist"] = 310 - fd_vertices["x_vert"].abs()
+        fd_vertices["y_vert_fv_mindist"] = 550 - fd_vertices["y_vert"].abs()
+        fd_vertices["z_vert_fv_backdist"] = 1244 - fd_vertices["z_vert"]
+        fd_vertices["z_vert_fv_frontdist"] = fd_vertices["z_vert"] - 50
+
         # joint the two dataframes
         # add fd prefix to the columns corresponding to FD vars
         fd_df.columns = ['fd_' + col for col in fd_df.columns]

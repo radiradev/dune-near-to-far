@@ -70,11 +70,21 @@ class NewPairedData(Dataset):
             #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             # ]
             # -- noN_sensible2
+            # near_reco = [
+            #     'eRecoP', 'eRecoPipm', 'eRecoPi0', 'eRecoOther',
+            #     'Ev_reco', 'Elep_reco', 'theta_reco',
+            #     'muon_tracker', 'muon_contained', 'Ehad_veto',
+            #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
+            # ]
+            # -- noN_sensible3
             near_reco = [
+                'nP', 'nipipm', 'nikpm', 'nipi0', 'nik0', 'niem', 'niother',
                 'eRecoP', 'eRecoPipm', 'eRecoPi0', 'eRecoOther',
                 'Ev_reco', 'Elep_reco', 'theta_reco',
                 'muon_tracker', 'muon_contained', 'Ehad_veto',
-                'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
+                'fd_x_vert_fv_mindist',
+                'fd_y_vert_fv_mindist',
+                'fd_z_vert_fv_frontdist', 'fd_z_vert_fv_backdist'
             ]
             # -- noN_trackercontained
             # near_reco = [

@@ -287,6 +287,7 @@ class GPT(nn.Module):
             else:
                 scores_loss = -scores_mixture.log_prob(targets[:, :self.scores_size]).mean()
                 far_reco_loss = -far_reco_mixture.log_prob(targets[:, self.scores_size:]).mean()
+                # Hardcoded weighting up the importance of fd_numu_nu_E prediction
                 loss = scores_loss + far_reco_loss
             return output, loss
 
@@ -305,8 +306,7 @@ class GPT(nn.Module):
         if transform:
             components = torch.distributions.TransformedDistribution(components, torch.distributions.transforms.SigmoidTransform())
         else:
-            pass
-            # components = torch.distributions.TransformedDistribution(components, torch.distributions.transforms.ExpTransform())
+            components = torch.distributions.TransformedDistribution(components, torch.distributions.transforms.ExpTransform())
         # construct the gaussian mixture distribution
         return torch.distributions.MixtureSameFamily(mixture, components)
 
