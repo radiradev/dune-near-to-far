@@ -22,7 +22,7 @@ class NewPairedData(Dataset):
         self.train = train
         self.sample_weight_var = [] if sample_weight_var is None else [sample_weight_var]
         if uniform_resample is not None:
-            self.uniform_resample_bins = uniform_reample[0]
+            self.uniform_resample_bins = uniform_resample[0]
             self.uniform_resample_probs = uniform_resample[1]
             self.sample_weight_var = [uniform_resample[2]]
             self.uniform_resample_binl_idxs = np.where(self.uniform_resample_probs)[0]
@@ -48,12 +48,12 @@ class NewPairedData(Dataset):
             #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             # ]
             # -- noN
-            near_reco = [
-                'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
-                'Ev_reco', 'Elep_reco', 'theta_reco',
-                'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
-                'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
-            ]
+            # near_reco = [
+            #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
+            #     'Ev_reco', 'Elep_reco', 'theta_reco',
+            #     'reco_numu', 'reco_nc', 'reco_nue', 'reco_lepton_pdg',
+            #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
+            # ]
             # -- noN_noleppdg # NOTE I accidently left 'reco_lepton_pdg' in here for some experiments
             # near_reco = [
             #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
@@ -69,6 +69,13 @@ class NewPairedData(Dataset):
             #     'muon_tracker', 'muon_contained', 'Ehad_veto',
             #     'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
             # ]
+            # -- noN_sensible2
+            near_reco = [
+                'eRecoP', 'eRecoPipm', 'eRecoPi0', 'eRecoOther',
+                'Ev_reco', 'Elep_reco', 'theta_reco',
+                'muon_tracker', 'muon_contained', 'Ehad_veto',
+                'fd_x_vert', 'fd_y_vert', 'fd_z_vert',
+            ]
             # -- noN_trackercontained
             # near_reco = [
             #     'eRecoP', 'eRecoPip', 'eRecoPim', 'eRecoPi0', 'eRecoOther',
@@ -100,11 +107,11 @@ class NewPairedData(Dataset):
             # cvn_scores = ['fd_numu_score']#, 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
             # far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E'] #,'fd_nue_lep_E', 'fd_numu_nu_E', 'fd_nue_nu_E']
             # -- allcvn
-            cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
-            far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E']
-            # -- 1cvn
-            # cvn_scores = ['fd_numu_score']
+            # cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
             # far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E']
+            # -- 1cvn
+            cvn_scores = ['fd_numu_score']
+            far_reco = ['fd_numu_nu_E', 'fd_numu_lep_E', 'fd_numu_had_E']
             # -- allcvn_fdnuElast
             # cvn_scores = ['fd_numu_score', 'fd_nue_score', 'fd_nc_score', 'fd_nutau_score']
             # far_reco = ['fd_numu_lep_E', 'fd_numu_had_E', 'fd_numu_nu_E']
@@ -147,7 +154,7 @@ class NewPairedData(Dataset):
 
         return data
 
-    def _get_idx_resample_var(self):
+    def _get_idx_resample_vars(self):
         resample_vars = np.array(self.data[:, -1])
         idxs = np.argsort(resample_vars)
         resample_vars_sorted = resample_vars[idxs]
@@ -164,16 +171,19 @@ class NewPairedData(Dataset):
         return self.block_size
 
     def _resample(self):
-        binl_idx = np.random.choice(self.uniform_resample_binl_idxs, p=self.uniform_sample_probs)
+        binl_idx = np.random.choice(self.uniform_resample_binl_idxs, p=self.uniform_resample_probs)
         resample_var = np.random.uniform(
-            self.uniform_resample_bins[bin_l_idx], self.uniform_resample_bins[bin_l_idx + 1]
+            self.uniform_resample_bins[binl_idx], self.uniform_resample_bins[binl_idx + 1]
         )
         idx = np.searchsorted(self.resample_vars_sorted, resample_var, side="left")
         if (
             idx > 0 and
             (
                 idx == len(self.resample_vars_sorted) or
-                abs(Ev - self.resample_vars_sorted[idx - 1]) < abs(Ev - self.resample_vars_sorted[idx])
+                (
+                    abs(resample_var - self.resample_vars_sorted[idx - 1]) <
+                    abs(resample_var - self.resample_vars_sorted[idx])
+                )
             )
         ):
             return self.idxs_sorted[idx - 1]

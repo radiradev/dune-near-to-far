@@ -193,9 +193,9 @@ if __name__ == '__main__':
     )
     
     if args.uniform_resampling_Ev:
-        uniform_resample_data = (np.array([0.5, 6.0]), np.array([0.5]), "Ev")
+        uniform_resample_data = (np.array([0.5, 6.0]), np.array([1.0]), "Ev")
     elif args.uniform_resampling_fd_numu_nu_E:
-        uniform_resample_data = (np.array([0.5, 6.0]), np.array([0.5]), "fd_numu_nu_E")
+        uniform_resample_data = (np.array([0.5, 6.0]), np.array([1.0]), "fd_numu_nu_E")
     elif args.uniform_resampling_ndcaf_Ev:
         bins = np.load("data/ndcafs_all_oa_trueE/allCAF_Ev_oaall_bins.npy")
         hist = np.load("data/ndcafs_all_oa_trueE/allCAF_Ev_oaall_hist.npy") # expect bin counts not rate
