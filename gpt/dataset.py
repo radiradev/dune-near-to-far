@@ -15,20 +15,22 @@ class NewPairedData(Dataset):
                  far_reco=None,
                  train=True,
                  sample_weight_var=None,
-                 uniform_resample=None):
+                 resample_data=None):
 
         super().__init__()
         self.data_path = data_path
         self.train = train
         self.sample_weight_var = [] if sample_weight_var is None else [sample_weight_var]
-        if uniform_resample is not None:
-            self.uniform_resample_bins = uniform_resample[0]
-            self.uniform_resample_probs = uniform_resample[1]
-            self.sample_weight_var = [uniform_resample[2]]
-            self.uniform_resample_binl_idxs = np.where(self.uniform_resample_probs)[0]
-            self.uniform_resample = True
+        if resample_data is not None:
+            self.resample_bins = resample_data[0]
+            self.resample_probs = resample_data[1]
+            self.sample_weight_var = [resample_data[2]]
+            self.resample_min = resample_data[3]
+            self.resample_max = resample_data[4]
+            self.resample_binl_idxs = np.where(self.resample_probs)[0]
+            self.resample = True
         else:
-            self.uniform_resample = False
+            self.resample = False
 
         if near_reco is None:
             # -- default
@@ -145,7 +147,7 @@ class NewPairedData(Dataset):
 
         self.block_size = len(near_reco) + len(cvn_scores) + len(far_reco) + 1
 
-        if self.uniform_resample:
+        if self.resample:
             self.resample_vars, self.resample_vars_sorted, self.idxs_sorted = self._get_idx_resample_vars()
             self.data = self.data[:, :-1] # Get rid of the sample weight column now
 
@@ -181,9 +183,9 @@ class NewPairedData(Dataset):
         return self.block_size
 
     def _resample(self):
-        binl_idx = np.random.choice(self.uniform_resample_binl_idxs, p=self.uniform_resample_probs)
+        binl_idx = np.random.choice(self.resample_binl_idxs, p=self.resample_probs)
         resample_var = np.random.uniform(
-            self.uniform_resample_bins[binl_idx], self.uniform_resample_bins[binl_idx + 1]
+            self.resample_bins[binl_idx], self.resample_bins[binl_idx + 1]
         )
         idx = np.searchsorted(self.resample_vars_sorted, resample_var, side="left")
         if (
@@ -218,8 +220,11 @@ class NewPairedData(Dataset):
         return len(self.data) - self.block_size
 
     def __getitem__(self, idx):
-        if self.uniform_resample:
-            if self.resample_vars[idx] < 0.5 or self.resample_vars[idx] > 6.0:
+        if self.resample:
+            if (
+                self.resample_vars[idx] < self.resample_min or
+                self.resample_vars[idx] > self.resample_max
+            ):
                 new_idx = idx
             else:
                 new_idx = self._resample()
