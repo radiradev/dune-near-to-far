@@ -352,7 +352,17 @@ def main(args):
     pred_list = []
     for i in range(num_iter):
         idx = torch.tensor(test_dataset.data[:, :len(test_dataset.near_reco)], dtype=torch.float).to(device)[i*batch_size:(i+1)*batch_size]
-        pred = model.generate(idx, device='cuda').cpu().numpy()
+        n_try = 0
+        while True:
+            n_try += 1
+            try:
+                pred = model.generate(idx, device='cuda').cpu().numpy()
+                break
+            except Exception as e:
+                print("bad pred, trying again...")
+                if n_try > 10:
+                    print("too many bad preds, giving up.")
+                    raise e
         if args.apply_sample_weights or args.apply_sample_weights_from is not None:
             pred = np.concatenate(
                 [pred, test_dataset.data[:, -1:][i*batch_size:(i+1)*batch_size]], axis=1
