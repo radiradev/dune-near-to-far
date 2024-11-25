@@ -115,14 +115,13 @@ class GPT(nn.Module):
         C.attn_pdrop = 0.1
         return C
 
-    def __init__(self, config):
+    def __init__(self, config, sample_weights_data=None):
         super().__init__()
         # assert config.vocab_size is not None
         assert config.block_size is not None and config.scores_size is not None and config.far_reco_size is not None
         self.block_size = config.block_size
         self.scores_size = config.scores_size
         self.far_reco_size = config.far_reco_size
-
 
         type_given = config.model_type is not None
         params_given = all([config.n_layer is not None, config.n_head is not None, config.n_embd is not None])
@@ -147,7 +146,7 @@ class GPT(nn.Module):
                 'gpt-nano':     dict(n_layer=3, n_head=3, n_embd=48),
             }[config.model_type]) #very verbose, can simplify
 
-        
+
         self.transformer = nn.ModuleDict(dict(
             wte = nn.Linear(1, config.n_embd), # is this stupid? linear layer instead of a token embedding
             wpe = nn.Embedding(config.block_size, config.n_embd),
@@ -166,6 +165,10 @@ class GPT(nn.Module):
         # report number of parameters (note we don't count the decoder parameters in lm_head)
         n_params = sum(p.numel() for p in self.transformer.parameters())
         print("number of parameters: %.2fM" % (n_params/1e6,))
+
+        if sample_weights_data is not None:
+            self.sample_weights_hist = sample_weights_data[0]
+            self.sample_weights_bins = sample_weights_data[1]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Linear):
@@ -223,10 +226,10 @@ class GPT(nn.Module):
         optimizer = torch.optim.AdamW(optim_groups, lr=train_config.learning_rate, betas=train_config.betas)
         return optimizer
 
-    def forward(self, idx, targets=None):
+    def forward(self, idx, targets=None, sample_weights_var=None):
         device = idx.device
         b, t = idx.size()
-    
+
         assert t <= self.block_size, f"Cannot forward sequence of length {t}, block size is only {self.block_size}"
         pos = torch.arange(0, t, dtype=torch.long, device=device).unsqueeze(0) # shape (1, t)
 
@@ -238,13 +241,12 @@ class GPT(nn.Module):
         for block in self.transformer.h:
             x = block(x)
 
-
         x = self.transformer.ln_f(x)
         output = self.lm_head(x) # (batch_size, n_objects, 3*n_gaussians)
-        not_near = self.scores_size + self.far_reco_size 
+        not_near = self.scores_size + self.far_reco_size
         output = output[:, -not_near:, :] #get rid of all tokens that correspond to near detector
         batch_size, n_objects, n_gaussians = output.shape
-        # this is a huge mess 
+        # this is a huge mess
         output = output.reshape(batch_size, n_objects, int(n_gaussians/3), 3)
         scores_output = output[:, :self.scores_size, :, :]
         far_reco_output = output[:, self.scores_size:, :, :]
@@ -255,11 +257,40 @@ class GPT(nn.Module):
         far_reco_mixture = self.compute_mixture(far_reco_output)
 
         if targets is not None:
-            scores_loss = -scores_mixture.log_prob(targets[:, :self.scores_size]).mean()
-            far_reco_loss = -far_reco_mixture.log_prob(targets[:, self.scores_size:]).mean()
-            loss = scores_loss + far_reco_loss
+            if sample_weights_var is not None:
+                # Should do this in init but dont have device there
+                sample_weights_hist = torch.tensor(
+                    self.sample_weights_hist, dtype=float, device=device
+                )
+                sample_weights_bins = torch.tensor(
+                    self.sample_weights_bins, dtype=float, device=device
+                )
+                # Finding training sample weights from histogram
+                sample_weights = sample_weights_hist[
+                    torch.bucketize(sample_weights_var, sample_weights_bins) - 1
+                ]
+                sample_weights = sample_weights.reshape(sample_weights.shape[0], 1)
+                # Apply sigmoid then training sample weights to log_probs to make loss
+                scores_loss = -scores_mixture.log_prob(targets[:, :self.scores_size])
+                scores_loss = torch.nn.functional.sigmoid(scores_loss) * sample_weights
+                # scores_loss = scores_loss * sample_weights
+                scores_loss = scores_loss.mean()
+                # Try to normalise the gradient for each mini-batch a bit, not sure if this
+                # is a sensisble thing to do though...
+                # scores_loss = scores_loss * (torch.sum(sample_weights) / sample_weights.shape[0])
+                far_reco_loss = -far_reco_mixture.log_prob(targets[:, self.scores_size:])
+                far_reco_loss = torch.nn.functional.sigmoid(far_reco_loss) * sample_weights
+                # far_reco_loss = far_reco_loss * sample_weights
+                far_reco_loss = far_reco_loss.mean()
+                # far_reco_loss = far_reco_loss * (torch.sum(sample_weights) / sample_weights.shape[0])
+                loss = (scores_loss + far_reco_loss) / 2
+            else:
+                scores_loss = -scores_mixture.log_prob(targets[:, :self.scores_size]).mean()
+                far_reco_loss = -far_reco_mixture.log_prob(targets[:, self.scores_size:]).mean()
+                # Hardcoded weighting up the importance of fd_numu_nu_E prediction
+                loss = scores_loss + far_reco_loss
             return output, loss
-        
+
         return output
 
     def compute_mixture(self, output, transform=False):
@@ -287,7 +318,7 @@ class GPT(nn.Module):
         output = self.forward(idx)
         gaussian_mixture = self.compute_mixture(output)
         return gaussian_mixture.log_prob(targets)
-    
+
     @torch.no_grad()
     def log_probability(self, idx, targets):
         """
@@ -308,17 +339,18 @@ class GPT(nn.Module):
 
         inner_idx = 0
         for i in range(start_dim, num_dims):
-            
+
             output = self.forward(x)
             output = output[:,-1, :, :].unsqueeze(1)
             transform = False
             if inner_idx <= self.scores_size - 1:
                 transform = True # first 4 dimensions are scores
             gaussian_mixture = self.compute_mixture(output, transform=transform)
-            
+
             x_next = gaussian_mixture.sample()
             x = torch.cat((x, x_next), dim=1)
 
             inner_idx += 1
 
         return x
+

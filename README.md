@@ -27,12 +27,12 @@ wtih `pip` (also possible with conda):
 `pip install -r requirements.txt`
  
 ## TO-dos and Issues
-- [ ] - Generation is not very stable - sometimes creates values outside of the required range for scores and energies.
-
-- [x] - Fix issue with  `best_val_loss` getting overriden at every evaluation in `gpt_train.py`.
 
 - [ ] - Explore other generative models. Any conditional generative models should work (diffusion, normalising flows, GANs)
 
+- [ ] - Make the input and output reco vars configurables from the CLI and stored in the config file rather than just hardcoding it into `gpt/dataset.py` with a bunch of them commented out
+
+- [ ] - Try normalising variables to [0, 1]
 
 ## Paired Dataset
 A paired dataset `.h5` file is required for training. This should be the ndfd reconstruction from the paired dataset simulation that has been concatenated into a single file. An example can be downloaded from [CERNBOX](https://cernbox.cern.ch/s/VL2wOEViP6QTXvv). Then use the provided script to apply cuts to the data. 
