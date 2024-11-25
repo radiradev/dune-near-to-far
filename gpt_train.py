@@ -15,6 +15,8 @@ from gpt.model import GPT
 from gpt.trainer import Trainer
 from gpt.utils import set_seed, setup_logging, CfgNode as CN
 
+PRINT_MODEL=True
+
 # -----------------------------------------------------------------------------
 
 def get_config(work_dir):
@@ -191,7 +193,7 @@ if __name__ == '__main__':
         args.uniform_reweight_Ev or
         args.uniform_reweight_fd_numu_nu_E
     )
-    
+
     if args.uniform_resampling_Ev:
         resample_data = (np.array([0.5, 6.0]), np.array([1.0]), "Ev", 0.5, 6.0)
     elif args.uniform_resampling_fd_numu_nu_E:
@@ -271,6 +273,14 @@ if __name__ == '__main__':
             batch_size=512,
             num_workers=4
     )
+
+    if PRINT_MODEL:
+        model.eval()
+        idx = torch.tensor(
+            val_dataset.data[:, :len(val_dataset.near_reco)], dtype=torch.float
+        ).to(device)[0:1]
+        model.print_forward_pass(idx)
+        model.train()
 
     best_val_loss = torch.inf
     # iteration callback
