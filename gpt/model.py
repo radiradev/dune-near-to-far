@@ -226,6 +226,22 @@ class GPT(nn.Module):
         optimizer = torch.optim.AdamW(optim_groups, lr=train_config.learning_rate, betas=train_config.betas)
         return optimizer
 
+    @torch.no_grad()
+    def print_forward_pass(self, dummy_input):
+        modules = []
+
+        def _forward_hook(module, input_t, output_t):
+            modules.append(module)
+
+        handle = self.register_forward_hook(_forward_hook)
+
+        with torch.no_grad():
+            self(dummy_input)
+
+        print([module for module in modules])
+
+        handle.remove()
+
     def forward(self, idx, targets=None, sample_weights_var=None):
         device = idx.device
         b, t = idx.size()
