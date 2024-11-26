@@ -287,6 +287,7 @@ def main(args):
     config.merge_from_args(merge_args)
     test_dataset = NewPairedData(data_path=args.data_path, train=False)
     config.model.block_size = test_dataset.get_block_size()
+    config.model.near_reco_size = test_dataset.get_near_reco_length()
     config.model.scores_size = test_dataset.get_scores_length()
     config.model.far_reco_size = test_dataset.get_far_reco_length()
 

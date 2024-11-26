@@ -31,6 +31,7 @@ def get_config(work_dir):
     # model
     C.model = GPT.get_default_config()
     C.model.model_type = 'gpt-mini'
+    C.model.no_causal_near_mask = False
 
     # trainer
     C.trainer = Trainer.get_default_config()
@@ -234,6 +235,7 @@ if __name__ == '__main__':
             data_path=args.data_path, train=False, sample_weight_var=sample_weight_var
         )
         config.model.block_size = train_dataset.get_block_size()
+        config.model.near_reco_size = train_dataset.get_near_reco_length()
         config.model.far_reco_size = train_dataset.get_far_reco_length()
         config.model.scores_size = train_dataset.get_scores_length()
 
@@ -259,6 +261,7 @@ if __name__ == '__main__':
         val_dataset = NewPairedData(data_path=args.data_path, train=False)
 
         config.model.block_size = train_dataset.get_block_size()
+        config.model.near_reco_size = train_dataset.get_near_reco_length()
         config.model.far_reco_size = train_dataset.get_far_reco_length()
         config.model.scores_size = train_dataset.get_scores_length()
 

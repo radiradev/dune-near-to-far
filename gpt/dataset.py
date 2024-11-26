@@ -176,6 +176,9 @@ class NewPairedData(Dataset):
     def get_scores_length(self):
         return len(self.cvn_scores)
 
+    def get_near_reco_length(self):
+        return len(self.near_reco)
+
     def get_far_reco_length(self):
         return len(self.far_reco)
 
