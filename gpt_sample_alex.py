@@ -680,6 +680,42 @@ def main(args):
         "ndfd_pi0E_hist2d_true_pred.pdf",
         logscale=True
     )
+    dist2d_plot(
+        (40, 70), ((0, 8), (0, 14)),
+        np.array(df[df["class"] == "true"]["fd_numu_had_E"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_had_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        r'ND $E_{\mathrm{had}}^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "ndfd_hadE_hist2d_true_pred.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (50, 70), ((0, 10), (0, 14)),
+        np.array(df[df["class"] == "true"]["fd_numu_lep_E"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_lep_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        r'ND $E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "ndfd_lepE_hist2d_true_pred.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (50, 40), ((0, 10), (0, 8)),
+        np.array(df[df["class"] == "true"]["fd_numu_lep_E"]),
+        np.array(df[df["class"] == "true"]["fd_numu_had_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_lep_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_had_E"]),
+        weights,
+        r'ND $E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "ndfd_lephad_hist2d_true_pred.pdf",
+        logscale=True
+    )
     if args.sample_weights_plots:
         # A bit hacky
         train_dataset = NewPairedData(
