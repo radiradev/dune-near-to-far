@@ -199,6 +199,67 @@ def dist2d_plot(
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
 
+def make_pdf_plots(dataset, model):
+    """
+    Messy, but get the mixture distribution object along with the true FD reco. Plot the
+    distribution and mark the true value on the plot.
+    """
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    for i_in in range(40):
+        nd_in = torch.tensor(dataset.data[:, :len(dataset.near_reco)], dtype=torch.float).to(device)[i_in:(i_in+1)]
+        fd_out = torch.tensor(dataset.data[:, len(dataset.near_reco):], dtype=torch.float).to(device)[i_in:(i_in+1)]
+        num_dims = model.block_size - 1
+        start_dim = nd_in.shape[1]
+        x = nd_in
+        inner_idx = 0
+
+        for i_dim in range(start_dim, num_dims):
+            out = model.forward(x)
+            out = out[:,-1, :, :].unsqueeze(1)
+            transform = False
+            if inner_idx <= model.scores_size - 1:
+                transform = True
+                label = dataset.cvn_scores[inner_idx]
+            else:
+                label = dataset.far_reco[inner_idx - model.scores_size]
+            gaussian_mixture = model.compute_mixture(out, transform=transform)
+
+            if label == "fd_numu_nu_E" or label == "fd_numu_score":
+                if inner_idx <= model.scores_size - 1:
+                    x_plt = torch.tensor([ 0.0001 + 0.0001 * i for i in range(10000 - 1) ]).to(device)
+                else:
+                    x_plt = torch.tensor([ 0.001 + 0.001 * i for i in range(14000) ]).to(device)
+                y_plt = torch.exp(gaussian_mixture.log_prob(x_plt)[0]).detach().cpu().numpy()
+                x_plt = x_plt.detach().cpu().numpy()
+                if inner_idx <= model.scores_size - 1:
+                    x_plt = np.concatenate([[0.0], x_plt, [1.0]])
+                    y_plt = np.concatenate([[0.0], y_plt, [0.0]])
+                fig, ax = plt.subplots(1, 1, layout="compressed", figsize=(5,4.5))
+                ax.plot(x_plt, y_plt, linewidth=1.25)
+                ax.vlines(
+                    fd_out[0][inner_idx].detach().cpu().numpy(),
+                    ymin=0, ymax=0.1, color="r", transform=ax.get_xaxis_transform()
+                )
+                ax.hlines(
+                    0,
+                    xmin=0, xmax=1.0, color="k", linewidth=0.75, transform=ax.get_yaxis_transform()
+                )
+                ax.set_ylabel("Probability Density", fontsize=15, loc="top")
+                if label == "fd_numu_nu_E":
+                    ax.set_xlabel("FD Reco. Neutrino Energy (GeV)", loc="right", fontsize=15)
+                else:
+                    ax.set_xlabel("FD CVN Numu Score", loc="right", fontsize=15)
+                ax.tick_params(top=False, right=False, which="both")
+                ax.xaxis.set_tick_params(labelsize=13)
+                ax.yaxis.set_tick_params(labelsize=13)
+                plt.savefig(os.path.join(args.work_dir, f"pdf_{label}_{i_in}.pdf"))
+                plt.close()
+
+            x_next = gaussian_mixture.sample()
+            x = torch.cat((x, x_next), dim=1)
+            inner_idx += 1
+
 # Thanks stackoverflow
 def add_identity(axes, *line_args, **line_kwargs):
     identity, = axes.plot([], [], *line_args, **line_kwargs)
@@ -349,6 +410,7 @@ def main(args):
     model = model.to(device)
 
     # shuffle it
+    np.random.seed(1)
     test_dataset.data = test_dataset.data[np.random.permutation(len(test_dataset.data))]
     pred_list = []
     for i in range(num_iter):
@@ -398,6 +460,10 @@ def main(args):
     plt.tight_layout()
     plt.savefig(os.path.join(args.work_dir, "plot_1.pdf"))
     plt.close()
+
+    if args.pdf_plots:
+        make_pdf_plots(test_dataset, model)
+        return
 
     # My distribution and residual plots
     dist_plot(
@@ -721,6 +787,10 @@ def parse_arguments():
     parser.add_argument(
         "--sample_weights_plots",
         action="store_true", help="Make plots of the original and reweighted spectra"
+    )
+    parser.add_argument(
+        "--pdf_plots",
+        action="store_true", help="Make plots showing try value and full predicted pdf"
     )
 
     args = parser.parse_args()
