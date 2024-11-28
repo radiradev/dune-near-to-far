@@ -11,6 +11,7 @@ import json
 import yaml
 import scipy.optimize
 import scipy.stats
+from tqdm import tqdm
 
 from gpt.utils import set_seed, setup_logging, CfgNode as CN
 from gpt.model import GPT
@@ -107,7 +108,7 @@ def diff_plot_by_var(bins, true, pred, var, xlabel, savename, clip=16):
     )
     ax.set_xlabel(xlabel, fontsize=16, loc="right")
     ax.set_ylabel("Frac. Diff.", fontsize=16, loc="top")
-    ax.set_xlim(0.0, 12.0)
+    ax.set_xlim(bins[0], bins[-1]) 
     ax.set_ylim(-1.0, 1.0)
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
@@ -120,7 +121,7 @@ def diff2d_plot_by_var(
         pred[pred > clip] = clip
 
     hist2d, bins_x, bins_y = np.histogram2d(
-        var, (pred - true) / true, bins=(n_bins, 100), range=(range_bins, (-1.0, 1.0))
+        var, (pred - true) / true, bins=(n_bins, 20), range=(range_bins, (-1.0, 1.0))
     )
     normaliser = np.sum(hist2d, axis=1)[:, None]
     normaliser[normaliser == 0] = 1
@@ -405,25 +406,30 @@ def main(args):
             df = pd.concat([df, df_true])
         return df
 
-    batch_size = 2000
-    num_iter = 90
+    batch_size = 100 if args.resample_negative_preds else 2000
+    num_iter = len(test_dataset) // batch_size + 1
     model = model.to(device)
 
     # shuffle it
     np.random.seed(1)
     test_dataset.data = test_dataset.data[np.random.permutation(len(test_dataset.data))]
     pred_list = []
-    for i in range(num_iter):
+    for i in tqdm(range(num_iter)):
         idx = torch.tensor(test_dataset.data[:, :len(test_dataset.near_reco)], dtype=torch.float).to(device)[i*batch_size:(i+1)*batch_size]
         n_try = 0
         while True:
             n_try += 1
             try:
                 pred = model.generate(idx, device='cuda').cpu().numpy()
+                if (
+                    args. resample_negative_preds and
+                    (pred[:, -len(test_dataset.far_reco):] < 0.0).sum()
+                ):
+                    continue
                 break
             except Exception as e:
                 print("bad pred, trying again...")
-                if n_try > 10:
+                if n_try > 20:
                     print("too many bad preds, giving up.")
                     raise e
         if args.apply_sample_weights or args.apply_sample_weights_from is not None:
@@ -432,6 +438,12 @@ def main(args):
             )
         pred_list.append(pred)
     pred = np.concatenate(pred_list)
+
+    print()
+    print(pred.shape)
+    print(((pred[:, -len(test_dataset.far_reco):] < 0.0).sum(axis=1) > 0.0).sum())
+    print(np.min(pred[:, -len(test_dataset.far_reco):]))
+    print()
 
     # ignore future warnings
     warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -517,13 +529,14 @@ def main(args):
         frac=True
     )
     diff_plot_by_var(
-        np.concatenate([
-            [0.0],
-            np.arange(0.5, 2.06, 0.04),
-            np.arange(2.1, 3.14, 0.08),
-            np.arange(3.16, 4.16, 0.1),
-            [4.5, 5.0, 6.0, 10.0, 120.0]
-        ]),
+        # np.concatenate([
+        #     [0.0],
+        #     np.arange(0.5, 2.06, 0.04),
+        #     np.arange(2.1, 3.14, 0.08),
+        #     np.arange(3.16, 4.16, 0.1),
+        #     [4.5, 5.0, 6.0, 10.0, 120.0]
+        # ]),
+        np.arange(0.5, 6.5, 0.5),
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         df[df["class"] == "true"]["fd_numu_nu_E"],
@@ -531,7 +544,8 @@ def main(args):
         "diff_by_fd_numu_nu_E.pdf"
     )
     diff2d_plot_by_var(
-        120, (0.0, 12.0),
+        # 120, (0.0, 12.0),
+        12, (0.0, 6.0),
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         df[df["class"] == "true"]["fd_numu_nu_E"],
@@ -827,6 +841,15 @@ def parse_arguments():
     parser.add_argument(
         "--pdf_plots",
         action="store_true", help="Make plots showing try value and full predicted pdf"
+    )
+    parser.add_argument(
+        "--resample_negative_preds",
+        action="store_true",
+        help=(
+            "Resample batches with negative prediced FD reco. "
+            "This is for when not using log-normal. "
+            "The batch size will be reduced to do this and so will take longer"
+        )
     )
 
     args = parser.parse_args()
