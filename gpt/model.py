@@ -342,7 +342,8 @@ class GPT(nn.Module):
         if transform:
             components = torch.distributions.TransformedDistribution(components, torch.distributions.transforms.SigmoidTransform())
         else:
-            components = torch.distributions.TransformedDistribution(components, torch.distributions.transforms.ExpTransform())
+            pass
+            # components = torch.distributions.TransformedDistribution(components, torch.distributions.transforms.ExpTransform())
         # construct the gaussian mixture distribution
         return torch.distributions.MixtureSameFamily(mixture, components)
 
