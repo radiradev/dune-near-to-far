@@ -286,9 +286,11 @@ if __name__ == '__main__':
         model.train()
 
     best_val_loss = torch.inf
+    n_plateau = 0
     # iteration callback
     def batch_end_callback(trainer):
         global best_val_loss
+        global n_plateau
 
         if trainer.iter_num % 10 == 0:
             print(
@@ -313,6 +315,15 @@ if __name__ == '__main__':
                 print("Model has the best validation loss, saving model")
                 ckpt_path = os.path.join(config.system.work_dir, "model.pt")
                 torch.save(model.state_dict(), ckpt_path)
+                n_plateau = 0
+            else:
+                n_plateau += 1
+                if n_plateau > 3:
+                    for g in trainer.optimizer.param_groups:
+                        print(f"LR: {g['lr']} -> {g['lr'] * 0.5}")
+                        g["lr"] = g["lr"] * 0.5
+                        n_plateau = 0
+                    
             # revert model to training mode
             model.train()
 
@@ -320,4 +331,6 @@ if __name__ == '__main__':
 
     # run the optimization
     trainer.run()
+
+    print(f"best val loss: {best_val_loss}")
 
