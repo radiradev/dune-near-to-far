@@ -55,7 +55,7 @@ def gauss_fit_func(x, a, mu, sigma):
     return a * scipy.stats.norm.pdf(x, loc=mu, scale=sigma)
 
 def diff_plot(bins, true, pred, weights, xlabel, savename, frac=False, fit=True, clip=60):
-    fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
+    fig, ax = plt.subplots(1, 1, figsize=(6,4.5), layout="compressed")
     ax.vlines(
         0, ymin=0, ymax=1, linestyle="dashed", linewidth=1, transform=ax.get_xaxis_transform()
     )
@@ -74,12 +74,14 @@ def diff_plot(bins, true, pred, weights, xlabel, savename, frac=False, fit=True,
         fit_y = gauss_fit_func(fit_x, *params)
         ax.plot(fit_x, fit_y, c="r")
         ax.text(
-            0.8, 0.9, r'$\mu =$' + f"{params[1]:.3f}\n" + r'$\sigma = $' + f"{params[2]:.3f}",
+            0.7, 0.9, r'$\mu =$' + f"{params[1]:.3f}\n" + r'$\sigma = $' + f"{params[2]:.3f}",
             ha="left", va="top", transform=ax.transAxes, fontsize=16
         )
     ax.set_ylabel("No. Events", fontsize=16, loc="top")
     ax.set_xlabel(xlabel, fontsize=16)
     ax.set_xlim(left=bins[0], right=bins[-1])
+    ax.xaxis.set_tick_params(labelsize=13)
+    ax.yaxis.set_tick_params(labelsize=13)
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
 
@@ -108,7 +110,7 @@ def diff_plot_by_var(bins, true, pred, var, xlabel, savename, clip=16):
     )
     ax.set_xlabel(xlabel, fontsize=16, loc="right")
     ax.set_ylabel("Frac. Diff.", fontsize=16, loc="top")
-    ax.set_xlim(bins[0], bins[-1]) 
+    ax.set_xlim(bins[0], bins[-1])
     ax.set_ylim(-1.0, 1.0)
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
@@ -145,17 +147,27 @@ def diff2d_plot_by_var(
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
 
-def dist_plot(bins, true, pred, weights, xlabel, savename, nd=None):
-    fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
+def dist_plot(bins, true, pred, weights, xlabel, savename, nd=None, cvn_xlim=False, logy=False):
+    fig, ax = plt.subplots(1, 1, figsize=(6,4.5), layout="compressed")
     if nd is not None:
         ax.hist(nd, bins=bins, weights=weights, histtype="step", label="ND", linestyle="dashed")
-    ax.hist(true, bins=bins, weights=weights, histtype="step", label="True")
-    ax.hist(pred, bins=bins, weights=weights, histtype="step", label="Pred")
+    else:
+        ax.plot([],[]) # just for the color cycle
+    ax.hist(true, bins=bins, weights=weights, histtype="step", label="FD True")
+    ax.hist(pred, bins=bins, weights=weights, histtype="step", label="FD Pred")
     new_handles, labels = get_new_handles(ax)
-    ax.legend(new_handles, labels, fontsize=14)
+    ax.legend(new_handles, labels, fontsize=14, borderpad=1.0)
     ax.set_xlabel(xlabel, fontsize=16, loc="right")
     ax.set_ylabel("No. Events", fontsize=16, loc="top")
-    ax.set_xlim(left=bins[0], right=bins[-1])
+    if cvn_xlim:
+        ax.set_xlim(left=-0.05, right=1.05)
+    else:
+        ax.set_xlim(left=bins[0], right=bins[-1])
+    if logy:
+        ax.set_yscale("log")
+    ax.xaxis.set_tick_params(labelsize=13)
+    ax.yaxis.set_tick_params(labelsize=13)
+    ax.tick_params(left=False, right=False, which="minor")
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
 
@@ -189,12 +201,12 @@ def dist2d_plot(
     )
     add_identity(ax[1], color="r", linestyle="dashed")
     cb = fig.colorbar(im, ax=[ax[0], ax[1]], orientation="vertical", location="right")
-    cb.set_label("No. Events", fontsize=12)
+    cb.set_label("No. Events", fontsize=16)
     for a in ax.flatten():
         a.set_xlabel(x_label, fontsize=16, loc="right")
         a.set_ylabel(y_label, fontsize=16, loc="top")
-        a.xaxis.set_tick_params(labelsize=12)
-        a.yaxis.set_tick_params(labelsize=12)
+        a.xaxis.set_tick_params(labelsize=13)
+        a.yaxis.set_tick_params(labelsize=13)
     ax[0].set_title("Model Prediction", fontsize=18, pad=15)
     ax[1].set_title("Paired Dataset", fontsize=18, pad=15)
     plt.savefig(os.path.join(args.work_dir, savename))
@@ -486,6 +498,25 @@ def main(args):
         "CVN numu Score",
         "cvn_dist_plot.pdf"
     )
+    dist_plot(
+        np.linspace(0.0, 1.0, 100),
+        df[df["class"] == "true"]["fd_numu_score"],
+        df[df["class"] == "predicted"]["fd_numu_score"],
+        weights,
+        "CVN numu Score",
+        "cvn_dist_thesis_plot.pdf",
+        cvn_xlim=True
+    )
+    dist_plot(
+        np.linspace(0.0, 1.0, 100),
+        df[df["class"] == "true"]["fd_numu_score"],
+        df[df["class"] == "predicted"]["fd_numu_score"],
+        weights,
+        "CVN numu Score",
+        "cvn_dist_thesislogy_plot.pdf",
+        cvn_xlim=True,
+        logy=True
+    )
     diff_plot(
         np.linspace(-0.25, 0.25, 100),
         df[df["class"] == "true"]["fd_numu_score"],
@@ -512,6 +543,26 @@ def main(args):
         "nuE_dist_fineishbinning_plot.pdf"
     )
     dist_plot(
+        np.linspace(0.0, 12.0, 80),
+        df[df["class"] == "true"]["fd_numu_nu_E"],
+        df[df["class"] == "predicted"]["fd_numu_nu_E"],
+        weights,
+        # r'$E_\nu^{\mathrm{reco}}$ (GeV)',
+        "Reco. Neutrino Energy (GeV)",
+        "nuE_dist_thesis_plot.pdf",
+        nd=df[df["class"] == "true"]["Ev_reco"]
+    )
+    dist_plot(
+        np.linspace(0.0, 8.0, 80),
+        df[df["class"] == "true"]["fd_numu_nu_E"],
+        df[df["class"] == "predicted"]["fd_numu_nu_E"],
+        weights,
+        # r'$E_\nu^{\mathrm{reco}}$ (GeV)',
+        "Reco. Neutrino Energy (GeV)",
+        "nuE_dist_thesis2_plot.pdf",
+        nd=df[df["class"] == "true"]["Ev_reco"]
+    )
+    dist_plot(
         np.linspace(0.0, 6.0, 150),
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
@@ -524,7 +575,8 @@ def main(args):
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         weights,
-        r'(Pred - True) / True FD $E_\nu^{\mathrm{reco}}$',
+        "(Pred - True) / True FD Reco. Neutrino Energy",
+        # r'(Pred - True) / True FD $E_\nu^{\mathrm{reco}}$',
         "nuE_diff_plot.pdf",
         frac=True
     )
@@ -554,13 +606,14 @@ def main(args):
     )
     if args.apply_sample_weights or args.apply_sample_weights_from is not None:
         diff_plot_by_var(
-            np.concatenate([
-                [0.0],
-                np.arange(0.5, 2.06, 0.04),
-                np.arange(2.1, 3.14, 0.08),
-                np.arange(3.16, 4.16, 0.1),
-                [4.5, 5.0, 6.0, 10.0, 120.0]
-            ]),
+            # np.concatenate([
+            #     [0.0],
+            #     np.arange(0.5, 2.06, 0.04),
+            #     np.arange(2.1, 3.14, 0.08),
+            #     np.arange(3.16, 4.16, 0.1),
+            #     [4.5, 5.0, 6.0, 10.0, 120.0]
+            # ]),
+            np.arange(0.5, 6.5, 0.5),
             df[df["class"] == "true"]["fd_numu_nu_E"],
             df[df["class"] == "predicted"]["fd_numu_nu_E"],
             df[df["class"] == "true"][weights_var],
@@ -585,6 +638,16 @@ def main(args):
             "lepE_dist_plot.pdf",
             nd=df[df["class"] == "true"]["Elep_reco"]
         )
+        dist_plot(
+            np.linspace(0.0, 11.0, 73),
+            df[df["class"] == "true"]["fd_numu_lep_E"],
+            df[df["class"] == "predicted"]["fd_numu_lep_E"],
+            weights,
+            # r'$E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
+            "Reco. Leptonic Energy (GeV)",
+            "lepE_dist_thesis_plot.pdf",
+            nd=df[df["class"] == "true"]["Elep_reco"]
+        )
         diff_plot(
             np.linspace(-1.0, 1.0, 100),
             df[df["class"] == "true"]["fd_numu_lep_E"],
@@ -602,6 +665,16 @@ def main(args):
             weights,
             r'$E_{\mathrm{had}}^{\mathrm{reco}}$ (GeV)',
             "hadE_dist_plot.pdf",
+            nd=df[df["class"] == "true"]["Ev_reco"] - df[df["class"] == "true"]["Elep_reco"]
+        )
+        dist_plot(
+            np.linspace(0.0, 4.0, 27),
+            df[df["class"] == "true"]["fd_numu_had_E"],
+            df[df["class"] == "predicted"]["fd_numu_had_E"],
+            weights,
+            # r'$E_{\mathrm{had}}^{\mathrm{reco}}$ (GeV)',
+            "Reco. Hadronic Energy (GeV)",
+            "hadE_dist_thesis_plot.pdf",
             nd=df[df["class"] == "true"]["Ev_reco"] - df[df["class"] == "true"]["Elep_reco"]
         )
         diff_plot(
@@ -625,6 +698,18 @@ def main(args):
         "ndfd_nuE_hist2d_true_pred.pdf"
     )
     dist2d_plot(
+        93, ((0, 14), (0, 14)),
+        np.array(df[df["class"] == "true"]["Ev_reco"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["Ev_reco"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco. Neutrino Energy (GeV)",
+        "FD Reco. Neutrino Energy (GeV)",
+        "ndfd_nuE_hist2d_true_pred_thesis.pdf",
+        logscale=True
+    )
+    dist2d_plot(
         150, ((0, 6), (0, 6)),
         np.array(df[df["class"] == "true"]["Ev_reco"]),
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
@@ -636,17 +721,6 @@ def main(args):
         "ndfd_nuE_hist2d_finebinning_true_pred.pdf"
     )
     dist2d_plot(
-        (60, 70), ((0, 12), (0, 14)),
-        np.array(df[df["class"] == "true"]["Elep_reco"]),
-        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
-        np.array(df[df["class"] == "predicted"]["Elep_reco"]),
-        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
-        weights,
-        r'ND $E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
-        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
-        "ndfd_lepE_hist2d_true_pred.pdf"
-    )
-    dist2d_plot(
         (40, 70), ((0, 3), (0, 14)),
         np.array(df[df["class"] == "true"]["eRecoP"]),
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
@@ -656,6 +730,18 @@ def main(args):
         r'ND $E_{\mathrm{proton}}^{\mathrm{reco}}$ (GeV)',
         r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
         "ndfd_protonE_hist2d_true_pred.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (60, 93), ((0, 2), (0, 14)),
+        np.array(df[df["class"] == "true"]["eRecoP"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["eRecoP"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco. Proton Energy (GeV)",
+        "FD Reco. Neutrino Energy (GeV)",
+        "ndfd_protonE_hist2d_true_pred_thesis.pdf",
         logscale=True
     )
     if "eRecoPipm" in df.columns:
@@ -683,6 +769,18 @@ def main(args):
         logscale=True
     )
     dist2d_plot(
+        (60, 93), ((0, 2), (0, 14)),
+        true_x,
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        pred_x,
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco. Charged Pion Energy (GeV)",
+        "FD Reco. Neutrino Energy (GeV)",
+        "ndfd_pipmE_hist2d_true_pred_thesis.pdf",
+        logscale=True
+    )
+    dist2d_plot(
         (40, 70), ((0, 3), (0, 14)),
         np.array(df[df["class"] == "true"]["eRecoPi0"]),
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
@@ -692,6 +790,18 @@ def main(args):
         r'ND $E_{\pi^0}^{\mathrm{reco}}$ (GeV)',
         r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
         "ndfd_pi0E_hist2d_true_pred.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (60, 93), ((0, 2), (0, 14)),
+        np.array(df[df["class"] == "true"]["eRecoPi0"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["eRecoPi0"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco. Neutral Pion Energy (GeV)",
+        "FD Reco. Neutrino Energy (GeV)",
+        "ndfd_pi0E_hist2d_true_pred_thesis.pdf",
         logscale=True
     )
     dist2d_plot(
@@ -707,6 +817,18 @@ def main(args):
         logscale=True
     )
     dist2d_plot(
+        (70, 93), ((0, 7), (0, 14)),
+        np.array(df[df["class"] == "true"]["fd_numu_had_E"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_had_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco. Hadronic Energy (GeV)",
+        "FD Reco. Neutrino Energy (GeV)",
+        "ndfd_hadE_hist2d_true_pred_thesis.pdf",
+        logscale=True
+    )
+    dist2d_plot(
         (50, 70), ((0, 10), (0, 14)),
         np.array(df[df["class"] == "true"]["fd_numu_lep_E"]),
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
@@ -719,15 +841,27 @@ def main(args):
         logscale=True
     )
     dist2d_plot(
-        (50, 40), ((0, 10), (0, 8)),
+        (93, 93), ((0, 14), (0, 14)),
+        np.array(df[df["class"] == "true"]["Elep_reco"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["Elep_reco"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco Leptonic Energy (GeV)",
+        "FD Reco Nuetirno Energy (GeV)",
+        "ndfd_lepE_hist2d_true_pred_thesis.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (73, 70), ((0, 11), (0, 7)),
         np.array(df[df["class"] == "true"]["fd_numu_lep_E"]),
         np.array(df[df["class"] == "true"]["fd_numu_had_E"]),
         np.array(df[df["class"] == "predicted"]["fd_numu_lep_E"]),
         np.array(df[df["class"] == "predicted"]["fd_numu_had_E"]),
         weights,
-        r'ND $E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
-        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
-        "ndfd_lephad_hist2d_true_pred.pdf",
+        "FD Reco. Leptonic Energy (GeV)",
+        "FD Reco. Hadronic Energy (GeV)",
+        "ndfd_lephad_hist2d_true_pred_thesis.pdf",
         logscale=True
     )
     if args.sample_weights_plots:
