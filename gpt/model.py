@@ -61,6 +61,7 @@ class CausalSelfAttention(nn.Module):
         # print("x ", x.shape)
 
         # calculate query, key, values for all heads in batch and move head forward to be the batch dim
+        # print("c_attn(x) ", self.c_attn(x).shape)
         q, k ,v  = self.c_attn(x).split(self.n_embd, dim=2)
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2) # (B, nh, T, hs)
@@ -73,15 +74,16 @@ class CausalSelfAttention(nn.Module):
 
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = (q @ k.transpose(-2, -1)) * (1.0 / math.sqrt(k.size(-1)))
-        #print("att ", att.shape)
+        # print("att ", att.shape)
         # causal self-attention; Self-attend: (B, nh, T, hs) x (B, nh, hs, T) -> (B, nh, T, T)
         att = att.masked_fill(self.bias[:,:,:T,:T] == 0, float('-inf'))
         att = F.softmax(att, dim=-1)
         att = self.attn_dropout(att)
         y = att @ v # (B, nh, T, T) x (B, nh, T, hs) -> (B, nh, T, hs)
-        #print("y ", y.shape)
+        # print("y ", y.shape)
         y = y.transpose(1, 2).contiguous().view(B, T, C) # re-assemble all head outputs side by side
         # print("y_reshape ", y.shape)
+        # print("c_proj(y) ", self.c_proj(y).shape)
         # print()
 
         # output projection
@@ -273,17 +275,23 @@ class GPT(nn.Module):
         tok_emb = self.transformer.wte(idx.unsqueeze(-1)) # token embeddings of shape (b, t, n_embd)
         pos_emb = self.transformer.wpe(pos) # position embeddings of shape (1, t, n_embd)
 
+        # print("idx ", idx.shape)
         x = self.transformer.drop(tok_emb + pos_emb)
+        # print("in x ", x.shape)
         for block in self.transformer.h:
             x = block(x)
+        # print("out x ", x.shape)
 
         x = self.transformer.ln_f(x)
         output = self.lm_head(x) # (batch_size, n_objects, 3*n_gaussians)
+        # print("output ", output.shape)
         not_near = self.scores_size + self.far_reco_size
         output = output[:, -not_near:, :] #get rid of all tokens that correspond to near detector
+        # print("output fd ", output.shape)
         batch_size, n_objects, n_gaussians = output.shape
         # this is a huge mess
         output = output.reshape(batch_size, n_objects, int(n_gaussians/3), 3)
+        # print("output fd reshape ", output.shape)
         scores_output = output[:, :self.scores_size, :, :]
         far_reco_output = output[:, self.scores_size:, :, :]
 
@@ -321,6 +329,8 @@ class GPT(nn.Module):
                 # far_reco_loss = far_reco_loss * (torch.sum(sample_weights) / sample_weights.shape[0])
                 loss = (scores_loss + far_reco_loss) / 2
             else:
+                # print("scores_loss ", (-scores_mixture.log_prob(targets[:, :self.scores_size])).shape)
+                # print("far_reco_loss ", (-far_reco_mixture.log_prob(targets[:, self.scores_size:])).shape)
                 scores_loss = -scores_mixture.log_prob(targets[:, :self.scores_size]).mean()
                 far_reco_loss = -far_reco_mixture.log_prob(targets[:, self.scores_size:]).mean()
                 # Hardcoded weighting up the importance of fd_numu_nu_E prediction

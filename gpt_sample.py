@@ -173,7 +173,7 @@ def dist_plot(bins, true, pred, weights, xlabel, savename, nd=None, cvn_xlim=Fal
 
 def dist2d_plot(
     n_bins, range_bins, true_x, true_y, pred_x, pred_y, weights, x_label, y_label, savename,
-    logscale=False
+    logscale=False, draw_identity=True
 ):
     true_hist2d, bins_x, bins_y = np.histogram2d(
         true_x, true_y, bins=n_bins, range=range_bins, weights=weights
@@ -194,12 +194,14 @@ def dist2d_plot(
         np.ma.masked_where(pred_hist2d == 0, pred_hist2d).T,
         origin="lower", interpolation="none", extent=extent, norm=norm, cmap="cividis", aspect="auto"
     )
-    add_identity(ax[0], color="r", linestyle="dashed")
+    if draw_identity:
+        add_identity(ax[0], color="r", linestyle="dashed")
     ax[1].imshow(
         np.ma.masked_where(true_hist2d == 0, true_hist2d).T,
         origin="lower", interpolation="none", extent=extent, norm=norm, cmap="cividis", aspect="auto"
     )
-    add_identity(ax[1], color="r", linestyle="dashed")
+    if draw_identity:
+        add_identity(ax[1], color="r", linestyle="dashed")
     cb = fig.colorbar(im, ax=[ax[0], ax[1]], orientation="vertical", location="right")
     cb.set_label("No. Events", fontsize=16)
     for a in ax.flatten():
@@ -359,7 +361,13 @@ def main(args):
             if "trainer" not in flat_arg and flat_arg != "system.work_dir"
     ]
     config.merge_from_args(merge_args)
-    test_dataset = NewPairedData(data_path=args.data_path, train=False)
+    test_dataset = NewPairedData(
+        data_path=args.data_path,
+        near_reco_preset=config.dataset.near_reco_preset,
+        far_reco_preset=config.dataset.far_reco_preset,
+        samples_in_val=config.dataset.samples_in_val,
+        train=False
+    )
     config.model.block_size = test_dataset.get_block_size()
     config.model.near_reco_size = test_dataset.get_near_reco_length()
     config.model.scores_size = test_dataset.get_scores_length()
@@ -392,11 +400,22 @@ def main(args):
                 weights_var = f.read().rstrip("\n")
 
         test_dataset = NewPairedData(
-            data_path=args.data_path, train=False, sample_weight_var=weights_var
+            data_path=args.data_path,
+            near_reco_preset=config.dataset.near_reco_preset,
+            far_reco_preset=config.dataset.far_reco_preset,
+            sample_weight_var=weights_var,
+            samples_in_val=config.dataset.samples_in_val,
+            train=False
         )
 
     else:
-        test_dataset = NewPairedData(data_path=args.data_path, train=False)
+        test_dataset = NewPairedData(
+            data_path=args.data_path,
+            near_reco_preset=config.dataset.near_reco_preset,
+            far_reco_preset=config.dataset.far_reco_preset,
+            samples_in_val=config.dataset.samples_in_val,
+            train=False
+        )
 
     def get_df(pred_x, true_x=None, weights_var=None):
         col_names = test_dataset.near_reco + test_dataset.cvn_scores + test_dataset.far_reco
@@ -862,12 +881,18 @@ def main(args):
         "FD Reco. Leptonic Energy (GeV)",
         "FD Reco. Hadronic Energy (GeV)",
         "ndfd_lephad_hist2d_true_pred_thesis.pdf",
-        logscale=True
+        logscale=True,
+        draw_identity=False
     )
     if args.sample_weights_plots:
         # A bit hacky
         train_dataset = NewPairedData(
-            data_path=args.data_path, train=True, sample_weight_var=weights_var
+            data_path=args.data_path,
+            near_reco_preset=config.dataset.near_reco_preset,
+            far_reco_preset=config.dataset.far_reco_preset,
+            sample_weight_var=weights_var,
+            samples_in_val=config.dataset.samples_in_val,
+            train=True
         )
         # Passing the true data as the predicted
         df_train = get_df(train_dataset.data, weights_var=weights_var)
