@@ -1,4 +1,4 @@
-import os, argparse, warnings
+import os, argparse, warnings, glob
 from collections.abc import MutableMapping
 import matplotlib
 import matplotlib.pyplot as plt
@@ -16,6 +16,7 @@ from tqdm import tqdm
 from gpt.utils import set_seed, setup_logging, CfgNode as CN
 from gpt.model import GPT
 from gpt.dataset import NewPairedData
+from helpers import get_reweight_scalefactors
 
 import dunestyle.matplotlib as dunestyle
 
@@ -30,6 +31,12 @@ def get_config(work_dir):
     # model
     C.model = GPT.get_default_config()
     C.model.model_type = 'gpt-mini'
+
+    # dataset
+    C.dataset = CN()
+    C.dataset.near_reco_preset="noN_sensible3"
+    C.dataset.far_reco_preset="cvn1"
+    C.dataset.samples_in_val=300_000
 
     return C
 
@@ -383,20 +390,36 @@ def main(args):
 
     if args.apply_sample_weights or args.apply_sample_weights_from is not None:
         if args.apply_sample_weights:
-            weights_hist = np.load(os.path.join(args.work_dir, "sampling_weights_hist.npy"))
-            weights_bins = np.load(os.path.join(args.work_dir, "sampling_weights_bins.npy"))
+            weights_hist = np.load(
+                os.path.join(args.work_dir, "sampling_weights_hist.npy")
+            )
+            weights_bins = np.load(
+                os.path.join(args.work_dir, "sampling_weights_bins.npy")
+            )
             with open(os.path.join(args.work_dir, "sampling_weights_var.txt"), "r") as f:
                 weights_var = f.read().rstrip("\n")
         else:
-            weights_hist = np.load(
-                os.path.join(args.apply_sample_weights_from, "sampling_weights_hist.npy")
+            weights_hist_path = glob.glob(
+                os.path.join(args.apply_sample_weights_from, "*_hist.npy")
             )
-            weights_bins = np.load(
-                os.path.join(args.apply_sample_weights_from, "sampling_weights_bins.npy")
+            assert len(weights_hist_path) == 1, (
+                "Did not find unambigious match for sample weights hist"
             )
-            with open(
-                os.path.join(args.apply_sample_weights_from, "sampling_weights_var.txt"), "r"
-            ) as f:
+            weights_bins_path = glob.glob(
+                os.path.join(args.apply_sample_weights_from, "*_bins.npy")
+            )
+            assert len(weights_bins_path) == 1, (
+                "Did not find unambigious match for sample weights bins"
+            )
+            weights_var_path = glob.glob(
+                os.path.join(args.apply_sample_weights_from, "*_var.txt")
+            )
+            assert len(weights_var_path) == 1, (
+                "Did not find unambigious match for sample weights var"
+            )
+            weights_hist = np.load(weights_hist_path[0])
+            weights_bins = np.load(weights_bins_path[0])
+            with open(weights_var_path[0], "r") as f:
                 weights_var = f.read().rstrip("\n")
 
         test_dataset = NewPairedData(
@@ -407,6 +430,11 @@ def main(args):
             samples_in_val=config.dataset.samples_in_val,
             train=False
         )
+
+        if args.apply_sample_weights_from:
+            weights_hist, weights_bins = get_reweight_scalefactors(
+                test_dataset.data[: -1], weights_bins, weights_hist
+            )
 
     else:
         test_dataset = NewPairedData(
@@ -453,7 +481,7 @@ def main(args):
             try:
                 pred = model.generate(idx, device='cuda').cpu().numpy()
                 if (
-                    args. resample_negative_preds and
+                    args.resample_negative_preds and
                     (pred[:, -len(test_dataset.far_reco):] < 0.0).sum()
                 ):
                     continue
@@ -991,7 +1019,12 @@ def parse_arguments():
     parser.add_argument(
         "--apply_sample_weights_from",
         type=str, default=None,
-        help="Apply training sample weighting from another experiment dir to validation plots"
+        help=(
+            "Apply training sample weighting from weights not associated with this experiment. "
+            "Expects a directory path, within which there is a single match for "
+            "*_hist.npy, *_bins.npy, *_var.txt that define the bin counts, bins, and variable "
+            "of the target histogram to reweight the test data events to match."
+        )
     )
     parser.add_argument(
         "--sample_weights_plots",

@@ -1,3 +1,5 @@
+import numpy as np
+
 """ Start - training reweight/resampler helpers """
 
 def read_reweight_dir(reweight_dir):
