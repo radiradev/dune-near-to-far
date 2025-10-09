@@ -26,12 +26,14 @@ class Trainer:
         C.betas = (0.9, 0.95)
         C.weight_decay = 0.1 # only applied on matmul weights
         C.grad_norm_clip = 1.0
+        C.lr_scheduler = None
         return C
 
     def __init__(self, config, model, train_dataset, sample_weighting=False):
         self.config = config
         self.model = model
         self.optimizer = None
+        self.lr_scheduler = None
         self.train_dataset = train_dataset
         self.callbacks = defaultdict(list)
         self.sample_weighting = sample_weighting
@@ -48,6 +50,7 @@ class Trainer:
         self.iter_num = 0
         self.iter_time = 0.0
         self.iter_dt = 0.0
+        self.running_losses = []
 
     def add_callback(self, onevent: str, callback):
         self.callbacks[onevent].append(callback)
@@ -75,6 +78,19 @@ class Trainer:
             num_workers=config.num_workers,
         )
 
+        # setup the lr scheduler
+        if config.lr_scheduler is not None:
+            if config.lr_scheduler == "OneCycleLR":
+                c = 2
+                self.lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                    self.optimizer,
+                    max_lr=config.learning_rate * c,
+                    epochs=config.num_epochs,
+                    steps_per_epoch=len(train_loader)
+                )
+            else:
+                raise ValueError(f"trainer.lr_scheduler={config.lr_scheduler} not valid")
+
         model.train()
         self.iter_num = 0
         self.iter_time = time.time()
@@ -99,6 +115,7 @@ class Trainer:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), config.grad_norm_clip)
                 self.optimizer.step()
 
+                self.running_losses.append(self.loss.item())
                 self.trigger_callbacks('on_batch_end')
                 self.iter_num += 1
                 tnow = time.time()

@@ -236,29 +236,42 @@ if __name__ == '__main__':
         model.print_forward_pass(idx)
         model.train()
 
+    i = 0
+    while os.path.exists(os.path.join(config.system.work_dir, f"losses_{i}.txt")):
+        i += 1
+    loss_file = os.path.join(config.system.work_dir, f"losses_{i}.txt")
+    print(f"Loss file is {loss_file}")
     best_val_loss = torch.inf
     n_plateau = 0
+    manual_plateau_scheduler = False
     # iteration callback
     def batch_end_callback(trainer):
         global best_val_loss
         global n_plateau
+        global loss_file
 
-        if trainer.iter_num % 10 == 0:
+        if isinstance(trainer.lr_scheduler, torch.optim.lr_scheduler.OneCycleLR):
+            trainer.lr_scheduler.step()
+
+        if trainer.iter_num % 100 == 0:
+            acc_loss = float(np.mean(trainer.running_losses))
+            trainer.running_losses.clear()
             print(
                 f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: "
-                f"train loss {trainer.loss.item():.5f}"
+                f"train loss {acc_loss:.5f}"
             )
+            with open(loss_file, "a+") as f:
+                f.write(f"TRAIN {trainer.iter_num} {acc_loss:.6f}\n")
 
-        if trainer.iter_num % 300 == 0:
+        if trainer.iter_num % 500 == 0:
             # evaluate both the train and test score
-            print(
-                f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: "
-                f"train loss {trainer.loss.item():.5f}"
-            )
             model.eval()
             with torch.no_grad():
                 val_loss = estimate_loss(val_loader, reweighting)
                 print("Validation Loss:", val_loss)
+
+            with open(loss_file, "a+") as f:
+                f.write(f"VALID {trainer.iter_num} {val_loss:.6f}\n")
 
             # save the latest model
             if val_loss < best_val_loss:
@@ -267,13 +280,21 @@ if __name__ == '__main__':
                 ckpt_path = os.path.join(config.system.work_dir, "model.pt")
                 torch.save(model.state_dict(), ckpt_path)
                 n_plateau = 0
-            else:
+            elif manual_plateau_scheduler:
                 n_plateau += 1
                 if n_plateau > 3:
                     for g in trainer.optimizer.param_groups:
                         print(f"LR: {g['lr']} -> {g['lr'] * 0.5}")
+                        with open(loss_file, "a+") as f:
+                            f.write(f"LR {trainer.iter_num} {g['lr']}\n")
                         g["lr"] = g["lr"] * 0.5
                         n_plateau = 0
+
+            if not manual_plateau_scheduler:
+                for g in trainer.optimizer.param_groups:
+                    print(f"LR: {g['lr']}")
+                    with open(loss_file, "a+") as f:
+                        f.write(f"LR {trainer.iter_num} {g['lr']}\n")
                     
             # revert model to training mode
             model.train()
