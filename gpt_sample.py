@@ -16,7 +16,7 @@ from tqdm import tqdm
 from gpt.utils import set_seed, setup_logging, CfgNode as CN
 from gpt.model import GPT
 from gpt.dataset import NewPairedData
-from helpers import get_reweight_scalefactors
+from helpers import get_reweight_scalefactors, read_reweight_dir
 
 import dunestyle.matplotlib as dunestyle
 
@@ -390,37 +390,14 @@ def main(args):
 
     if args.apply_sample_weights or args.apply_sample_weights_from is not None:
         if args.apply_sample_weights:
-            weights_hist = np.load(
-                os.path.join(args.work_dir, "sampling_weights_hist.npy")
-            )
-            weights_bins = np.load(
-                os.path.join(args.work_dir, "sampling_weights_bins.npy")
-            )
+            weights_hist = np.load(os.path.join(args.work_dir, "sampling_weights_hist.npy"))
+            weights_bins = np.load(os.path.join(args.work_dir, "sampling_weights_bins.npy"))
             with open(os.path.join(args.work_dir, "sampling_weights_var.txt"), "r") as f:
                 weights_var = f.read().rstrip("\n")
         else:
-            weights_hist_path = glob.glob(
-                os.path.join(args.apply_sample_weights_from, "*_hist.npy")
+            weights_bins, weights_hist, weights_var = read_reweight_dir(
+                args.apply_sample_weights_from
             )
-            assert len(weights_hist_path) == 1, (
-                "Did not find unambigious match for sample weights hist"
-            )
-            weights_bins_path = glob.glob(
-                os.path.join(args.apply_sample_weights_from, "*_bins.npy")
-            )
-            assert len(weights_bins_path) == 1, (
-                "Did not find unambigious match for sample weights bins"
-            )
-            weights_var_path = glob.glob(
-                os.path.join(args.apply_sample_weights_from, "*_var.txt")
-            )
-            assert len(weights_var_path) == 1, (
-                "Did not find unambigious match for sample weights var"
-            )
-            weights_hist = np.load(weights_hist_path[0])
-            weights_bins = np.load(weights_bins_path[0])
-            with open(weights_var_path[0], "r") as f:
-                weights_var = f.read().rstrip("\n")
 
         test_dataset = NewPairedData(
             data_path=args.data_path,
@@ -433,7 +410,7 @@ def main(args):
 
         if args.apply_sample_weights_from:
             weights_hist, weights_bins = get_reweight_scalefactors(
-                test_dataset.data[: -1], weights_bins, weights_hist
+                test_dataset.data[:, -1], weights_bins, weights_hist
             )
 
     else:

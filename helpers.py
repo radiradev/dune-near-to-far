@@ -1,3 +1,5 @@
+import glob, os
+
 import numpy as np
 
 """ Start - training reweight/resampler helpers """
@@ -43,6 +45,9 @@ def get_reweight_scalefactors(train_sample_weight_var_data, target_bins, target_
     # taking the ratio should be 1 / sum(counts) not 1 / sum(rates).
     # for i in range(len(train_hist)):
     #     train_hist[i] /= (train_bins[i + 1] - train_bins[i])
+    # for i in range(len(target_hist)):
+    #     target_hist[i] /= (target_bins[i + 1] - target_bins[i])
+    # target_hist /= np.sum(target_hist)
     train_hist /= np.sum(train_hist)
     ratio_hist = target_hist / train_hist
 
