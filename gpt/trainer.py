@@ -27,6 +27,7 @@ class Trainer:
         C.weight_decay = 0.1 # only applied on matmul weights
         C.grad_norm_clip = 1.0
         C.lr_scheduler = None
+        C.onecycleLR_max_lr_factor = 2
         return C
 
     def __init__(self, config, model, train_dataset, sample_weighting=False):
@@ -81,7 +82,7 @@ class Trainer:
         # setup the lr scheduler
         if config.lr_scheduler is not None:
             if config.lr_scheduler == "OneCycleLR":
-                c = 2
+                c = config.onecycleLR_max_lr_factor
                 self.lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
                     self.optimizer,
                     max_lr=config.learning_rate * c,
