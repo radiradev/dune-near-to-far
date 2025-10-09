@@ -14,6 +14,7 @@ class Trainer:
     @staticmethod
     def get_default_config():
         C = CN()
+        C.num_epochs = 8
         # device to train on
         C.device = 'auto'
         # dataloder parameters
@@ -78,8 +79,7 @@ class Trainer:
         self.iter_num = 0
         self.iter_time = time.time()
         data_iter = iter(train_loader)
-        num_epochs = 8
-        for epoch in range(num_epochs):
+        for epoch in range(config.num_epochs):
             print(f"Epoch {epoch}")
             for batch in train_loader:
                 batch = [t.to(self.device) for t in batch]
