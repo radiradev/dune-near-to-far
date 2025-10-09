@@ -10,15 +10,19 @@ import glob
 from torch.utils.data.dataloader import DataLoader
 
 import numpy as np
-from gpt.dataset import PairedData, NewPairedData
+from gpt.dataset import NewPairedData
 from gpt.model import GPT
 from gpt.trainer import Trainer
 from gpt.utils import set_seed, setup_logging, CfgNode as CN
+from helpers import (
+    read_reweight_dir, get_reweight_uniform, get_reweight_scalefactors, get_resample_data
+)
+
+PRINT_MODEL=True
 
 # -----------------------------------------------------------------------------
 
 def get_config(work_dir):
-
     C = CN()
 
     # system
@@ -29,21 +33,27 @@ def get_config(work_dir):
     # model
     C.model = GPT.get_default_config()
     C.model.model_type = 'gpt-mini'
+    C.model.no_causal_near_mask = False
 
     # trainer
     C.trainer = Trainer.get_default_config()
     C.trainer.learning_rate = 5e-4 # the model we're using is so small that we can go a bit faster
 
+    # dataset
+    C.dataset = CN()
+    C.dataset.near_reco_preset="noN_sensible3"
+    C.dataset.far_reco_preset="cvn1"
+    C.dataset.samples_in_val=300_000
+
     return C
 
-eval_iters = 20
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 @torch.no_grad()
 def estimate_loss(val_loader, sample_weighting):
     model.eval()
     losses = []
-    for batch in (val_loader):
+    for i, batch in enumerate(val_loader):
         batch = [t.to(device) for t in batch]
         if sample_weighting:
             x, y, weight_var = batch
@@ -55,60 +65,6 @@ def estimate_loss(val_loader, sample_weighting):
     loss = np.stack(losses).mean()
     model.train()
     return loss
-
-def read_reweight_dir(reweight_dir):
-    bins_file = glob.glob(os.path.join(reweight_dir, "*_bins.npy"))
-    assert len(bins_file) == 1, "Invalid reweight dir structure."
-    weight_bins = np.load(bins_file[0])
-    hist_file = glob.glob(os.path.join(reweight_dir, "*_hist.npy"))
-    assert len(hist_file) == 1, "Invalid reweight dir structure."
-    weight_hist = np.load(hist_file[0])
-    var_file = glob.glob(os.path.join(reweight_dir, "*_var.txt"))
-    assert len(var_file) == 1, "Invalid reweight dir structure."
-    with open(var_file[0], "r") as f:
-        var_name = f.read().rstrip("\n")
-    return weight_bins, weight_hist, var_name
-
-# Reweights s.t. the most energies are flat and the rest is almost flat
-# (very large weights # at the extreme energies can make training unstable)
-def get_reweight_uniform(train_sample_weight_var_data):
-    bins = np.arange(0.0, 14.25, 0.25)
-    train_hist, _ = np.histogram(train_sample_weight_var_data, bins=bins)
-    train_hist = train_hist.astype(float)
-    train_hist /= np.sum(train_hist)
-    target_hist = np.ones_like(train_hist).astype(float)
-    target_hist /= np.sum(target_hist)
-    ratio_hist = target_hist / train_hist
-
-    bins = np.concatenate([bins, [120.0]])
-    ratio_hist = np.concatenate([ratio_hist, [np.max(ratio_hist)]])
-    ratio_hist = np.clip(ratio_hist, 0.0, 20.0)
-
-    print("Training sample weights histogram is:")
-    print(ratio_hist)
-    print(bins)
-
-    return ratio_hist, bins
-
-def get_reweight_scalefactors(train_sample_weight_var_data, target_bins, target_hist):
-    train_hist, train_bins = np.histogram(train_sample_weight_var_data, bins=target_bins)
-    train_hist = train_hist.astype(float)
-    # Fairly sure this is the wrong thing to do... the normalisation of each histogram before
-    # taking the ratio should be 1 / sum(counts) not 1 / sum(rates).
-    # for i in range(len(train_hist)):
-    #     train_hist[i] /= (train_bins[i + 1] - train_bins[i])
-    train_hist /= np.sum(train_hist)
-    ratio_hist = target_hist / train_hist
-
-    # Dont really care about <0.5GeV and >6GeV
-    ratio_hist[-2:] = 1.0
-    ratio_hist[0] = 1.0
-
-    print("Training sample weights histogram is:")
-    print(ratio_hist)
-    print(train_bins)
-
-    return ratio_hist, train_bins
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -191,27 +147,8 @@ if __name__ == '__main__':
         args.uniform_reweight_Ev or
         args.uniform_reweight_fd_numu_nu_E
     )
-    
-    if args.uniform_resampling_Ev:
-        resample_data = (np.array([0.5, 6.0]), np.array([1.0]), "Ev", 0.5, 6.0)
-    elif args.uniform_resampling_fd_numu_nu_E:
-        resample_data = (np.array([0.5, 6.0]), np.array([1.0]), "fd_numu_nu_E", 0.5, 6.0)
-    elif args.resampling_ndcaf_Ev:
-        bins = np.load("data/ndcafs_all_oa_trueE/allCAF_Ev_oaall_bins.npy")
-        hist = np.load("data/ndcafs_all_oa_trueE/allCAF_Ev_oaall_hist.npy") # expect bin counts not rate
-        # hist = hist[(bins >= 0.5) & (bins <= 6.0)]
-        # bins = bins[(bins >= 0.5) & (bins <= 6.0)]
-        hist /= np.sum(hist)
-        resample_data = (bins, hist, "Ev", 0.0, 120.0)
-    elif args.resampling_osc_Ev:
-        bins = np.load("data/prism_nufit_target_fd_flux_norate/FDTargetFlux_bins.npy")
-        hist = np.load("data/prism_nufit_target_fd_flux_norate/FDTargetFlux_hist.npy") # expect bin counts not rate
-        # hist = hist[(bins >= 0.5) & (bins <= 6.0)]
-        # bins = bins[(bins >= 0.5) & (bins <= 6.0)]
-        hist /= np.sum(hist)
-        resample_data = (bins, hist, "Ev", 0.0, 120.0)
-    else:
-        resample_data = None
+
+    resample_data = get_resample_data(args)
 
     if reweighting:
         print(f"Reweighting training using {args.training_reweight}")
@@ -226,12 +163,23 @@ if __name__ == '__main__':
             )
 
         train_dataset = NewPairedData(
-            data_path=args.data_path, train=True, sample_weight_var=sample_weight_var
+            data_path=args.data_path,
+            near_reco_preset=config.dataset.near_reco_preset,
+            far_reco_preset=config.dataset.far_reco_preset,
+            sample_weight_var=sample_weight_var,
+            samples_in_val=config.dataset.samples_in_val,
+            train=True
         )
         val_dataset = NewPairedData(
-            data_path=args.data_path, train=False, sample_weight_var=sample_weight_var
+            data_path=args.data_path,
+            near_reco_preset=config.dataset.near_reco_preset,
+            far_reco_preset=config.dataset.far_reco_preset,
+            sample_weight_var=sample_weight_var,
+            samples_in_val=config.dataset.samples_in_val,
+            train=False
         )
         config.model.block_size = train_dataset.get_block_size()
+        config.model.near_reco_size = train_dataset.get_near_reco_length()
         config.model.far_reco_size = train_dataset.get_far_reco_length()
         config.model.scores_size = train_dataset.get_scores_length()
 
@@ -252,11 +200,23 @@ if __name__ == '__main__':
 
     else:
         train_dataset = NewPairedData(
-            data_path=args.data_path, train=True, resample_data=resample_data
+            data_path=args.data_path,
+            near_reco_preset=config.dataset.near_reco_preset,
+            far_reco_preset=config.dataset.far_reco_preset,
+            resample_data=resample_data,
+            samples_in_val=config.dataset.samples_in_val,
+            train=True
         )
-        val_dataset = NewPairedData(data_path=args.data_path, train=False)
+        val_dataset = NewPairedData(
+            data_path=args.data_path,
+            near_reco_preset=config.dataset.near_reco_preset,
+            far_reco_preset=config.dataset.far_reco_preset,
+            samples_in_val=config.dataset.samples_in_val,
+            train=False
+        )
 
         config.model.block_size = train_dataset.get_block_size()
+        config.model.near_reco_size = train_dataset.get_near_reco_length()
         config.model.far_reco_size = train_dataset.get_far_reco_length()
         config.model.scores_size = train_dataset.get_scores_length()
 
@@ -265,34 +225,53 @@ if __name__ == '__main__':
         trainer = Trainer(config.trainer, model, train_dataset)
 
     val_loader = DataLoader(
-            val_dataset,
-            shuffle=False,
-            pin_memory=True,
-            batch_size=512,
-            num_workers=4
+        val_dataset, shuffle=False, pin_memory=True, batch_size=512, num_workers=4
     )
 
+    if PRINT_MODEL:
+        model.eval()
+        idx = torch.tensor(
+            val_dataset.data[:, :len(val_dataset.near_reco)], dtype=torch.float
+        ).to(device)[0:1]
+        model.print_forward_pass(idx)
+        model.train()
+
+    i = 0
+    while os.path.exists(os.path.join(config.system.work_dir, f"losses_{i}.txt")):
+        i += 1
+    loss_file = os.path.join(config.system.work_dir, f"losses_{i}.txt")
+    print(f"Loss file is {loss_file}")
     best_val_loss = torch.inf
+    n_plateau = 0
+    manual_plateau_scheduler = False
     # iteration callback
     def batch_end_callback(trainer):
         global best_val_loss
+        global n_plateau
+        global loss_file
 
-        if trainer.iter_num % 10 == 0:
+        if isinstance(trainer.lr_scheduler, torch.optim.lr_scheduler.OneCycleLR):
+            trainer.lr_scheduler.step()
+
+        if trainer.iter_num % 100 == 0:
+            acc_loss = float(np.mean(trainer.running_losses))
+            trainer.running_losses.clear()
             print(
                 f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: "
-                f"train loss {trainer.loss.item():.5f}"
+                f"train loss {acc_loss:.5f}"
             )
+            with open(loss_file, "a+") as f:
+                f.write(f"TRAIN {trainer.iter_num} {acc_loss:.6f}\n")
 
-        if trainer.iter_num % 300 == 0:
+        if trainer.iter_num % 500 == 0:
             # evaluate both the train and test score
-            print(
-                f"iter_dt {trainer.iter_dt * 1000:.2f}ms; iter {trainer.iter_num}: "
-                f"train loss {trainer.loss.item():.5f}"
-            )
             model.eval()
             with torch.no_grad():
                 val_loss = estimate_loss(val_loader, reweighting)
                 print("Validation Loss:", val_loss)
+
+            with open(loss_file, "a+") as f:
+                f.write(f"VALID {trainer.iter_num} {val_loss:.6f}\n")
 
             # save the latest model
             if val_loss < best_val_loss:
@@ -300,6 +279,23 @@ if __name__ == '__main__':
                 print("Model has the best validation loss, saving model")
                 ckpt_path = os.path.join(config.system.work_dir, "model.pt")
                 torch.save(model.state_dict(), ckpt_path)
+                n_plateau = 0
+            elif manual_plateau_scheduler:
+                n_plateau += 1
+                if n_plateau > 3:
+                    for g in trainer.optimizer.param_groups:
+                        print(f"LR: {g['lr']} -> {g['lr'] * 0.5}")
+                        with open(loss_file, "a+") as f:
+                            f.write(f"LR {trainer.iter_num} {g['lr']}\n")
+                        g["lr"] = g["lr"] * 0.5
+                        n_plateau = 0
+
+            if not manual_plateau_scheduler:
+                for g in trainer.optimizer.param_groups:
+                    print(f"LR: {g['lr']}")
+                    with open(loss_file, "a+") as f:
+                        f.write(f"LR {trainer.iter_num} {g['lr']}\n")
+                    
             # revert model to training mode
             model.train()
 
@@ -307,4 +303,6 @@ if __name__ == '__main__':
 
     # run the optimization
     trainer.run()
+
+    print(f"best val loss: {best_val_loss}")
 

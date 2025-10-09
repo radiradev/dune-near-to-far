@@ -1,4 +1,4 @@
-import os, argparse, warnings
+import os, argparse, warnings, glob
 from collections.abc import MutableMapping
 import matplotlib
 import matplotlib.pyplot as plt
@@ -11,10 +11,12 @@ import json
 import yaml
 import scipy.optimize
 import scipy.stats
+from tqdm import tqdm
 
 from gpt.utils import set_seed, setup_logging, CfgNode as CN
 from gpt.model import GPT
 from gpt.dataset import NewPairedData
+from helpers import get_reweight_scalefactors, read_reweight_dir
 
 import dunestyle.matplotlib as dunestyle
 
@@ -29,6 +31,12 @@ def get_config(work_dir):
     # model
     C.model = GPT.get_default_config()
     C.model.model_type = 'gpt-mini'
+
+    # dataset
+    C.dataset = CN()
+    C.dataset.near_reco_preset="noN_sensible3"
+    C.dataset.far_reco_preset="cvn1"
+    C.dataset.samples_in_val=300_000
 
     return C
 
@@ -54,7 +62,7 @@ def gauss_fit_func(x, a, mu, sigma):
     return a * scipy.stats.norm.pdf(x, loc=mu, scale=sigma)
 
 def diff_plot(bins, true, pred, weights, xlabel, savename, frac=False, fit=True, clip=60):
-    fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
+    fig, ax = plt.subplots(1, 1, figsize=(6,4.5), layout="compressed")
     ax.vlines(
         0, ymin=0, ymax=1, linestyle="dashed", linewidth=1, transform=ax.get_xaxis_transform()
     )
@@ -73,12 +81,14 @@ def diff_plot(bins, true, pred, weights, xlabel, savename, frac=False, fit=True,
         fit_y = gauss_fit_func(fit_x, *params)
         ax.plot(fit_x, fit_y, c="r")
         ax.text(
-            0.8, 0.9, r'$\mu =$' + f"{params[1]:.3f}\n" + r'$\sigma = $' + f"{params[2]:.3f}",
+            0.7, 0.9, r'$\mu =$' + f"{params[1]:.3f}\n" + r'$\sigma = $' + f"{params[2]:.3f}",
             ha="left", va="top", transform=ax.transAxes, fontsize=16
         )
     ax.set_ylabel("No. Events", fontsize=16, loc="top")
     ax.set_xlabel(xlabel, fontsize=16)
     ax.set_xlim(left=bins[0], right=bins[-1])
+    ax.xaxis.set_tick_params(labelsize=13)
+    ax.yaxis.set_tick_params(labelsize=13)
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
 
@@ -107,7 +117,7 @@ def diff_plot_by_var(bins, true, pred, var, xlabel, savename, clip=16):
     )
     ax.set_xlabel(xlabel, fontsize=16, loc="right")
     ax.set_ylabel("Frac. Diff.", fontsize=16, loc="top")
-    ax.set_xlim(0.0, 12.0)
+    ax.set_xlim(bins[0], bins[-1])
     ax.set_ylim(-1.0, 1.0)
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
@@ -120,7 +130,7 @@ def diff2d_plot_by_var(
         pred[pred > clip] = clip
 
     hist2d, bins_x, bins_y = np.histogram2d(
-        var, (pred - true) / true, bins=(n_bins, 100), range=(range_bins, (-1.0, 1.0))
+        var, (pred - true) / true, bins=(n_bins, 20), range=(range_bins, (-1.0, 1.0))
     )
     normaliser = np.sum(hist2d, axis=1)[:, None]
     normaliser[normaliser == 0] = 1
@@ -144,23 +154,33 @@ def diff2d_plot_by_var(
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
 
-def dist_plot(bins, true, pred, weights, xlabel, savename, nd=None):
-    fig, ax = plt.subplots(1, 1, figsize=(8,6), layout="compressed")
+def dist_plot(bins, true, pred, weights, xlabel, savename, nd=None, cvn_xlim=False, logy=False):
+    fig, ax = plt.subplots(1, 1, figsize=(6,4.5), layout="compressed")
     if nd is not None:
         ax.hist(nd, bins=bins, weights=weights, histtype="step", label="ND", linestyle="dashed")
-    ax.hist(true, bins=bins, weights=weights, histtype="step", label="True")
-    ax.hist(pred, bins=bins, weights=weights, histtype="step", label="Pred")
+    else:
+        ax.plot([],[]) # just for the color cycle
+    ax.hist(true, bins=bins, weights=weights, histtype="step", label="FD True")
+    ax.hist(pred, bins=bins, weights=weights, histtype="step", label="FD Pred")
     new_handles, labels = get_new_handles(ax)
-    ax.legend(new_handles, labels, fontsize=14)
+    ax.legend(new_handles, labels, fontsize=14, borderpad=1.0)
     ax.set_xlabel(xlabel, fontsize=16, loc="right")
     ax.set_ylabel("No. Events", fontsize=16, loc="top")
-    ax.set_xlim(left=bins[0], right=bins[-1])
+    if cvn_xlim:
+        ax.set_xlim(left=-0.05, right=1.05)
+    else:
+        ax.set_xlim(left=bins[0], right=bins[-1])
+    if logy:
+        ax.set_yscale("log")
+    ax.xaxis.set_tick_params(labelsize=13)
+    ax.yaxis.set_tick_params(labelsize=13)
+    ax.tick_params(left=False, right=False, which="minor")
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
 
 def dist2d_plot(
     n_bins, range_bins, true_x, true_y, pred_x, pred_y, weights, x_label, y_label, savename,
-    logscale=False
+    logscale=False, draw_identity=True
 ):
     true_hist2d, bins_x, bins_y = np.histogram2d(
         true_x, true_y, bins=n_bins, range=range_bins, weights=weights
@@ -181,23 +201,86 @@ def dist2d_plot(
         np.ma.masked_where(pred_hist2d == 0, pred_hist2d).T,
         origin="lower", interpolation="none", extent=extent, norm=norm, cmap="cividis", aspect="auto"
     )
-    add_identity(ax[0], color="r", linestyle="dashed")
+    if draw_identity:
+        add_identity(ax[0], color="r", linestyle="dashed")
     ax[1].imshow(
         np.ma.masked_where(true_hist2d == 0, true_hist2d).T,
         origin="lower", interpolation="none", extent=extent, norm=norm, cmap="cividis", aspect="auto"
     )
-    add_identity(ax[1], color="r", linestyle="dashed")
+    if draw_identity:
+        add_identity(ax[1], color="r", linestyle="dashed")
     cb = fig.colorbar(im, ax=[ax[0], ax[1]], orientation="vertical", location="right")
-    cb.set_label("No. Events", fontsize=12)
+    cb.set_label("No. Events", fontsize=16)
     for a in ax.flatten():
         a.set_xlabel(x_label, fontsize=16, loc="right")
         a.set_ylabel(y_label, fontsize=16, loc="top")
-        a.xaxis.set_tick_params(labelsize=12)
-        a.yaxis.set_tick_params(labelsize=12)
+        a.xaxis.set_tick_params(labelsize=13)
+        a.yaxis.set_tick_params(labelsize=13)
     ax[0].set_title("Model Prediction", fontsize=18, pad=15)
     ax[1].set_title("Paired Dataset", fontsize=18, pad=15)
     plt.savefig(os.path.join(args.work_dir, savename))
     plt.close()
+
+def make_pdf_plots(dataset, model):
+    """
+    Messy, but get the mixture distribution object along with the true FD reco. Plot the
+    distribution and mark the true value on the plot.
+    """
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    for i_in in range(40):
+        nd_in = torch.tensor(dataset.data[:, :len(dataset.near_reco)], dtype=torch.float).to(device)[i_in:(i_in+1)]
+        fd_out = torch.tensor(dataset.data[:, len(dataset.near_reco):], dtype=torch.float).to(device)[i_in:(i_in+1)]
+        num_dims = model.block_size - 1
+        start_dim = nd_in.shape[1]
+        x = nd_in
+        inner_idx = 0
+
+        for i_dim in range(start_dim, num_dims):
+            out = model.forward(x)
+            out = out[:,-1, :, :].unsqueeze(1)
+            transform = False
+            if inner_idx <= model.scores_size - 1:
+                transform = True
+                label = dataset.cvn_scores[inner_idx]
+            else:
+                label = dataset.far_reco[inner_idx - model.scores_size]
+            gaussian_mixture = model.compute_mixture(out, transform=transform)
+
+            if label == "fd_numu_nu_E" or label == "fd_numu_score":
+                if inner_idx <= model.scores_size - 1:
+                    x_plt = torch.tensor([ 0.0001 + 0.0001 * i for i in range(10000 - 1) ]).to(device)
+                else:
+                    x_plt = torch.tensor([ 0.001 + 0.001 * i for i in range(14000) ]).to(device)
+                y_plt = torch.exp(gaussian_mixture.log_prob(x_plt)[0]).detach().cpu().numpy()
+                x_plt = x_plt.detach().cpu().numpy()
+                if inner_idx <= model.scores_size - 1:
+                    x_plt = np.concatenate([[0.0], x_plt, [1.0]])
+                    y_plt = np.concatenate([[0.0], y_plt, [0.0]])
+                fig, ax = plt.subplots(1, 1, layout="compressed", figsize=(5,4.5))
+                ax.plot(x_plt, y_plt, linewidth=1.25)
+                ax.vlines(
+                    fd_out[0][inner_idx].detach().cpu().numpy(),
+                    ymin=0, ymax=0.1, color="r", transform=ax.get_xaxis_transform()
+                )
+                ax.hlines(
+                    0,
+                    xmin=0, xmax=1.0, color="k", linewidth=0.75, transform=ax.get_yaxis_transform()
+                )
+                ax.set_ylabel("Probability Density", fontsize=15, loc="top")
+                if label == "fd_numu_nu_E":
+                    ax.set_xlabel("FD Reco. Neutrino Energy (GeV)", loc="right", fontsize=15)
+                else:
+                    ax.set_xlabel("FD CVN Numu Score", loc="right", fontsize=15)
+                ax.tick_params(top=False, right=False, which="both")
+                ax.xaxis.set_tick_params(labelsize=13)
+                ax.yaxis.set_tick_params(labelsize=13)
+                plt.savefig(os.path.join(args.work_dir, f"pdf_{label}_{i_in}.pdf"))
+                plt.close()
+
+            x_next = gaussian_mixture.sample()
+            x = torch.cat((x, x_next), dim=1)
+            inner_idx += 1
 
 # Thanks stackoverflow
 def add_identity(axes, *line_args, **line_kwargs):
@@ -285,8 +368,15 @@ def main(args):
             if "trainer" not in flat_arg and flat_arg != "system.work_dir"
     ]
     config.merge_from_args(merge_args)
-    test_dataset = NewPairedData(data_path=args.data_path, train=False)
+    test_dataset = NewPairedData(
+        data_path=args.data_path,
+        near_reco_preset=config.dataset.near_reco_preset,
+        far_reco_preset=config.dataset.far_reco_preset,
+        samples_in_val=config.dataset.samples_in_val,
+        train=False
+    )
     config.model.block_size = test_dataset.get_block_size()
+    config.model.near_reco_size = test_dataset.get_near_reco_length()
     config.model.scores_size = test_dataset.get_scores_length()
     config.model.far_reco_size = test_dataset.get_far_reco_length()
 
@@ -305,23 +395,32 @@ def main(args):
             with open(os.path.join(args.work_dir, "sampling_weights_var.txt"), "r") as f:
                 weights_var = f.read().rstrip("\n")
         else:
-            weights_hist = np.load(
-                os.path.join(args.apply_sample_weights_from, "sampling_weights_hist.npy")
+            weights_bins, weights_hist, weights_var = read_reweight_dir(
+                args.apply_sample_weights_from
             )
-            weights_bins = np.load(
-                os.path.join(args.apply_sample_weights_from, "sampling_weights_bins.npy")
-            )
-            with open(
-                os.path.join(args.apply_sample_weights_from, "sampling_weights_var.txt"), "r"
-            ) as f:
-                weights_var = f.read().rstrip("\n")
 
         test_dataset = NewPairedData(
-            data_path=args.data_path, train=False, sample_weight_var=weights_var
+            data_path=args.data_path,
+            near_reco_preset=config.dataset.near_reco_preset,
+            far_reco_preset=config.dataset.far_reco_preset,
+            sample_weight_var=weights_var,
+            samples_in_val=config.dataset.samples_in_val,
+            train=False
         )
 
+        if args.apply_sample_weights_from:
+            weights_hist, weights_bins = get_reweight_scalefactors(
+                test_dataset.data[:, -1], weights_bins, weights_hist
+            )
+
     else:
-        test_dataset = NewPairedData(data_path=args.data_path, train=False)
+        test_dataset = NewPairedData(
+            data_path=args.data_path,
+            near_reco_preset=config.dataset.near_reco_preset,
+            far_reco_preset=config.dataset.far_reco_preset,
+            samples_in_val=config.dataset.samples_in_val,
+            train=False
+        )
 
     def get_df(pred_x, true_x=None, weights_var=None):
         col_names = test_dataset.near_reco + test_dataset.cvn_scores + test_dataset.far_reco
@@ -343,24 +442,30 @@ def main(args):
             df = pd.concat([df, df_true])
         return df
 
-    batch_size = 2000
-    num_iter = 90
+    batch_size = 100 if args.resample_negative_preds else 2000
+    num_iter = len(test_dataset) // batch_size + 1
     model = model.to(device)
 
     # shuffle it
+    np.random.seed(1)
     test_dataset.data = test_dataset.data[np.random.permutation(len(test_dataset.data))]
     pred_list = []
-    for i in range(num_iter):
+    for i in tqdm(range(num_iter)):
         idx = torch.tensor(test_dataset.data[:, :len(test_dataset.near_reco)], dtype=torch.float).to(device)[i*batch_size:(i+1)*batch_size]
         n_try = 0
         while True:
             n_try += 1
             try:
                 pred = model.generate(idx, device='cuda').cpu().numpy()
+                if (
+                    args.resample_negative_preds and
+                    (pred[:, -len(test_dataset.far_reco):] < 0.0).sum()
+                ):
+                    continue
                 break
             except Exception as e:
                 print("bad pred, trying again...")
-                if n_try > 10:
+                if n_try > 20:
                     print("too many bad preds, giving up.")
                     raise e
         if args.apply_sample_weights or args.apply_sample_weights_from is not None:
@@ -369,6 +474,12 @@ def main(args):
             )
         pred_list.append(pred)
     pred = np.concatenate(pred_list)
+
+    print()
+    print(pred.shape)
+    print(((pred[:, -len(test_dataset.far_reco):] < 0.0).sum(axis=1) > 0.0).sum())
+    print(np.min(pred[:, -len(test_dataset.far_reco):]))
+    print()
 
     # ignore future warnings
     warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -398,6 +509,10 @@ def main(args):
     plt.savefig(os.path.join(args.work_dir, "plot_1.pdf"))
     plt.close()
 
+    if args.pdf_plots:
+        make_pdf_plots(test_dataset, model)
+        return
+
     # My distribution and residual plots
     dist_plot(
         np.linspace(0.0, 1.0, 50),
@@ -406,6 +521,25 @@ def main(args):
         weights,
         "CVN numu Score",
         "cvn_dist_plot.pdf"
+    )
+    dist_plot(
+        np.linspace(0.0, 1.0, 100),
+        df[df["class"] == "true"]["fd_numu_score"],
+        df[df["class"] == "predicted"]["fd_numu_score"],
+        weights,
+        "CVN numu Score",
+        "cvn_dist_thesis_plot.pdf",
+        cvn_xlim=True
+    )
+    dist_plot(
+        np.linspace(0.0, 1.0, 100),
+        df[df["class"] == "true"]["fd_numu_score"],
+        df[df["class"] == "predicted"]["fd_numu_score"],
+        weights,
+        "CVN numu Score",
+        "cvn_dist_thesislogy_plot.pdf",
+        cvn_xlim=True,
+        logy=True
     )
     diff_plot(
         np.linspace(-0.25, 0.25, 100),
@@ -433,6 +567,26 @@ def main(args):
         "nuE_dist_fineishbinning_plot.pdf"
     )
     dist_plot(
+        np.linspace(0.0, 12.0, 80),
+        df[df["class"] == "true"]["fd_numu_nu_E"],
+        df[df["class"] == "predicted"]["fd_numu_nu_E"],
+        weights,
+        # r'$E_\nu^{\mathrm{reco}}$ (GeV)',
+        "Reco. Neutrino Energy (GeV)",
+        "nuE_dist_thesis_plot.pdf",
+        nd=df[df["class"] == "true"]["Ev_reco"]
+    )
+    dist_plot(
+        np.linspace(0.0, 8.0, 80),
+        df[df["class"] == "true"]["fd_numu_nu_E"],
+        df[df["class"] == "predicted"]["fd_numu_nu_E"],
+        weights,
+        # r'$E_\nu^{\mathrm{reco}}$ (GeV)',
+        "Reco. Neutrino Energy (GeV)",
+        "nuE_dist_thesis2_plot.pdf",
+        nd=df[df["class"] == "true"]["Ev_reco"]
+    )
+    dist_plot(
         np.linspace(0.0, 6.0, 150),
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
@@ -445,18 +599,20 @@ def main(args):
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         weights,
-        r'(Pred - True) / True FD $E_\nu^{\mathrm{reco}}$',
+        "(Pred - True) / True FD Reco. Neutrino Energy",
+        # r'(Pred - True) / True FD $E_\nu^{\mathrm{reco}}$',
         "nuE_diff_plot.pdf",
         frac=True
     )
     diff_plot_by_var(
-        np.concatenate([
-            [0.0],
-            np.arange(0.5, 2.06, 0.04),
-            np.arange(2.1, 3.14, 0.08),
-            np.arange(3.16, 4.16, 0.1),
-            [4.5, 5.0, 6.0, 10.0, 120.0]
-        ]),
+        # np.concatenate([
+        #     [0.0],
+        #     np.arange(0.5, 2.06, 0.04),
+        #     np.arange(2.1, 3.14, 0.08),
+        #     np.arange(3.16, 4.16, 0.1),
+        #     [4.5, 5.0, 6.0, 10.0, 120.0]
+        # ]),
+        np.arange(0.5, 6.5, 0.5),
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         df[df["class"] == "true"]["fd_numu_nu_E"],
@@ -464,7 +620,8 @@ def main(args):
         "diff_by_fd_numu_nu_E.pdf"
     )
     diff2d_plot_by_var(
-        120, (0.0, 12.0),
+        # 120, (0.0, 12.0),
+        12, (0.0, 6.0),
         df[df["class"] == "true"]["fd_numu_nu_E"],
         df[df["class"] == "predicted"]["fd_numu_nu_E"],
         df[df["class"] == "true"]["fd_numu_nu_E"],
@@ -473,13 +630,14 @@ def main(args):
     )
     if args.apply_sample_weights or args.apply_sample_weights_from is not None:
         diff_plot_by_var(
-            np.concatenate([
-                [0.0],
-                np.arange(0.5, 2.06, 0.04),
-                np.arange(2.1, 3.14, 0.08),
-                np.arange(3.16, 4.16, 0.1),
-                [4.5, 5.0, 6.0, 10.0, 120.0]
-            ]),
+            # np.concatenate([
+            #     [0.0],
+            #     np.arange(0.5, 2.06, 0.04),
+            #     np.arange(2.1, 3.14, 0.08),
+            #     np.arange(3.16, 4.16, 0.1),
+            #     [4.5, 5.0, 6.0, 10.0, 120.0]
+            # ]),
+            np.arange(0.5, 6.5, 0.5),
             df[df["class"] == "true"]["fd_numu_nu_E"],
             df[df["class"] == "predicted"]["fd_numu_nu_E"],
             df[df["class"] == "true"][weights_var],
@@ -504,6 +662,16 @@ def main(args):
             "lepE_dist_plot.pdf",
             nd=df[df["class"] == "true"]["Elep_reco"]
         )
+        dist_plot(
+            np.linspace(0.0, 11.0, 73),
+            df[df["class"] == "true"]["fd_numu_lep_E"],
+            df[df["class"] == "predicted"]["fd_numu_lep_E"],
+            weights,
+            # r'$E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
+            "Reco. Leptonic Energy (GeV)",
+            "lepE_dist_thesis_plot.pdf",
+            nd=df[df["class"] == "true"]["Elep_reco"]
+        )
         diff_plot(
             np.linspace(-1.0, 1.0, 100),
             df[df["class"] == "true"]["fd_numu_lep_E"],
@@ -521,6 +689,16 @@ def main(args):
             weights,
             r'$E_{\mathrm{had}}^{\mathrm{reco}}$ (GeV)',
             "hadE_dist_plot.pdf",
+            nd=df[df["class"] == "true"]["Ev_reco"] - df[df["class"] == "true"]["Elep_reco"]
+        )
+        dist_plot(
+            np.linspace(0.0, 4.0, 27),
+            df[df["class"] == "true"]["fd_numu_had_E"],
+            df[df["class"] == "predicted"]["fd_numu_had_E"],
+            weights,
+            # r'$E_{\mathrm{had}}^{\mathrm{reco}}$ (GeV)',
+            "Reco. Hadronic Energy (GeV)",
+            "hadE_dist_thesis_plot.pdf",
             nd=df[df["class"] == "true"]["Ev_reco"] - df[df["class"] == "true"]["Elep_reco"]
         )
         diff_plot(
@@ -544,6 +722,18 @@ def main(args):
         "ndfd_nuE_hist2d_true_pred.pdf"
     )
     dist2d_plot(
+        93, ((0, 14), (0, 14)),
+        np.array(df[df["class"] == "true"]["Ev_reco"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["Ev_reco"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco. Neutrino Energy (GeV)",
+        "FD Reco. Neutrino Energy (GeV)",
+        "ndfd_nuE_hist2d_true_pred_thesis.pdf",
+        logscale=True
+    )
+    dist2d_plot(
         150, ((0, 6), (0, 6)),
         np.array(df[df["class"] == "true"]["Ev_reco"]),
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
@@ -555,17 +745,6 @@ def main(args):
         "ndfd_nuE_hist2d_finebinning_true_pred.pdf"
     )
     dist2d_plot(
-        (60, 70), ((0, 12), (0, 14)),
-        np.array(df[df["class"] == "true"]["Elep_reco"]),
-        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
-        np.array(df[df["class"] == "predicted"]["Elep_reco"]),
-        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
-        weights,
-        r'ND $E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
-        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
-        "ndfd_lepE_hist2d_true_pred.pdf"
-    )
-    dist2d_plot(
         (40, 70), ((0, 3), (0, 14)),
         np.array(df[df["class"] == "true"]["eRecoP"]),
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
@@ -575,6 +754,18 @@ def main(args):
         r'ND $E_{\mathrm{proton}}^{\mathrm{reco}}$ (GeV)',
         r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
         "ndfd_protonE_hist2d_true_pred.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (60, 93), ((0, 2), (0, 14)),
+        np.array(df[df["class"] == "true"]["eRecoP"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["eRecoP"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco. Proton Energy (GeV)",
+        "FD Reco. Neutrino Energy (GeV)",
+        "ndfd_protonE_hist2d_true_pred_thesis.pdf",
         logscale=True
     )
     if "eRecoPipm" in df.columns:
@@ -602,6 +793,18 @@ def main(args):
         logscale=True
     )
     dist2d_plot(
+        (60, 93), ((0, 2), (0, 14)),
+        true_x,
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        pred_x,
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco. Charged Pion Energy (GeV)",
+        "FD Reco. Neutrino Energy (GeV)",
+        "ndfd_pipmE_hist2d_true_pred_thesis.pdf",
+        logscale=True
+    )
+    dist2d_plot(
         (40, 70), ((0, 3), (0, 14)),
         np.array(df[df["class"] == "true"]["eRecoPi0"]),
         np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
@@ -613,10 +816,88 @@ def main(args):
         "ndfd_pi0E_hist2d_true_pred.pdf",
         logscale=True
     )
+    dist2d_plot(
+        (60, 93), ((0, 2), (0, 14)),
+        np.array(df[df["class"] == "true"]["eRecoPi0"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["eRecoPi0"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco. Neutral Pion Energy (GeV)",
+        "FD Reco. Neutrino Energy (GeV)",
+        "ndfd_pi0E_hist2d_true_pred_thesis.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (40, 70), ((0, 8), (0, 14)),
+        np.array(df[df["class"] == "true"]["fd_numu_had_E"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_had_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        r'ND $E_{\mathrm{had}}^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "ndfd_hadE_hist2d_true_pred.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (70, 93), ((0, 7), (0, 14)),
+        np.array(df[df["class"] == "true"]["fd_numu_had_E"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_had_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco. Hadronic Energy (GeV)",
+        "FD Reco. Neutrino Energy (GeV)",
+        "ndfd_hadE_hist2d_true_pred_thesis.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (50, 70), ((0, 10), (0, 14)),
+        np.array(df[df["class"] == "true"]["fd_numu_lep_E"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_lep_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        r'ND $E_{\mathrm{lep}}^{\mathrm{reco}}$ (GeV)',
+        r'FD $E_\nu^{\mathrm{reco}}$ (GeV)',
+        "ndfd_lepE_hist2d_true_pred.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (93, 93), ((0, 14), (0, 14)),
+        np.array(df[df["class"] == "true"]["Elep_reco"]),
+        np.array(df[df["class"] == "true"]["fd_numu_nu_E"]),
+        np.array(df[df["class"] == "predicted"]["Elep_reco"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_nu_E"]),
+        weights,
+        "ND Reco Leptonic Energy (GeV)",
+        "FD Reco Nuetirno Energy (GeV)",
+        "ndfd_lepE_hist2d_true_pred_thesis.pdf",
+        logscale=True
+    )
+    dist2d_plot(
+        (73, 70), ((0, 11), (0, 7)),
+        np.array(df[df["class"] == "true"]["fd_numu_lep_E"]),
+        np.array(df[df["class"] == "true"]["fd_numu_had_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_lep_E"]),
+        np.array(df[df["class"] == "predicted"]["fd_numu_had_E"]),
+        weights,
+        "FD Reco. Leptonic Energy (GeV)",
+        "FD Reco. Hadronic Energy (GeV)",
+        "ndfd_lephad_hist2d_true_pred_thesis.pdf",
+        logscale=True,
+        draw_identity=False
+    )
     if args.sample_weights_plots:
         # A bit hacky
         train_dataset = NewPairedData(
-            data_path=args.data_path, train=True, sample_weight_var=weights_var
+            data_path=args.data_path,
+            near_reco_preset=config.dataset.near_reco_preset,
+            far_reco_preset=config.dataset.far_reco_preset,
+            sample_weight_var=weights_var,
+            samples_in_val=config.dataset.samples_in_val,
+            train=True
         )
         # Passing the true data as the predicted
         df_train = get_df(train_dataset.data, weights_var=weights_var)
@@ -715,11 +996,29 @@ def parse_arguments():
     parser.add_argument(
         "--apply_sample_weights_from",
         type=str, default=None,
-        help="Apply training sample weighting from another experiment dir to validation plots"
+        help=(
+            "Apply training sample weighting from weights not associated with this experiment. "
+            "Expects a directory path, within which there is a single match for "
+            "*_hist.npy, *_bins.npy, *_var.txt that define the bin counts, bins, and variable "
+            "of the target histogram to reweight the test data events to match."
+        )
     )
     parser.add_argument(
         "--sample_weights_plots",
         action="store_true", help="Make plots of the original and reweighted spectra"
+    )
+    parser.add_argument(
+        "--pdf_plots",
+        action="store_true", help="Make plots showing try value and full predicted pdf"
+    )
+    parser.add_argument(
+        "--resample_negative_preds",
+        action="store_true",
+        help=(
+            "Resample batches with negative prediced FD reco. "
+            "This is for when not using log-normal. "
+            "The batch size will be reduced to do this and so will take longer"
+        )
     )
 
     args = parser.parse_args()

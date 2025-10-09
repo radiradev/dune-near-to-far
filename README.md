@@ -6,88 +6,38 @@ We learn this autoregressively, i.e the transformer is trained to predict:
 $$p(x_{FD} | x_{ND}) = \prod_i p(x_{i_{FD}}| x_{1_{FD}}, x_{2_{FD}}, ..., x_{i-1_{FD}}, x_{ND}) $$
 
 We learn each `fd` dimension as Gaussian Mixture distribution that has been changed in some way. 
-For the CVN scores we transform the distribution using a sigmoid to ensure it stays within the range $[0, 1]$ and for the `fd` energies we transform them using the exponential to ensure that the distribution is strictly positive and a with a tail.
+For the CVN scores we transform the distribution using a sigmoid to ensure it stays within the range $[0, 1]$.
 
-## Usage
- - Generate Data (see Paired Dataset section)
+\_ 
+## Train a Model
 
- - Change the `data_path` in `NewPairedData` in the `gpt.dataset.py` script (see how to download the dataset below)
+To train a model do:
+```
+python gpy_train.py <data_path> <work_dir>
+```
+Where `data_path` is the training data csv file and `work_dir` is the path to a directory (that does not have to exist) where data related to the training will be written. Hyperparameters may be set from the command line with the `-o` flag, check `python gpt_train.py --help` to see how. To understand the hyperparameters and what values they may take, you need to read the code :).
 
- - Train using `python3 gpt_train.py <data_path> <work_dir>`. 
+The `gpt_train.py` script has many arguments related to resampling/reweighting the training dataset. A decent amount of the codebase also handles all this. In the end, I found this to not be useful so never use it. But it is all still there just incase. The idea is you may want your training set to mimic different underlying distributions such as an oscillated FD true neutrino energy spectrum.
 
- - Then use the `gpt_sample.ipynb` notebook to generate new events and make plots.
+## Evaluating a Model
 
-## Vertices
-Vertices from the training data in `data/train_vertices.npy` in shape `n_samples, 3`
-The columns are in order `x, y, z`.
+Once you have trained a model, the `work_dir` for this training will contain the best (by validation loss) model checkpoint, the loss curve data, and the hyperparameters defining the experiment.
+
+You can plot the loss curve using the `scripts/plot_lc.py` script.
+
+You can produce evaluation plots (that will be written to the `work_dir`) using:
+```
+python gpt_sample.py <data_path> <work_dir>
+```
+There are a few optional arguments. You should probably always use `--resample_negative_preds` which will resample the Gaussian mixture if the result is negative. `--pdf_plots` plots the predicted Gaussian mixture for some number of events, can be interesting. It is useful to know how the model performs when the test dataset distribution is changed, this can be done for, say, FD oscillated true energy with  `--apply_sample_weights_from data/prism_nufit_target_fd_flux_norate`. The predicted distributions should match the truth well under any true neutrino energy distribution.
+
+## Generating Paired Data for Training 
+
+A paired dataset `.h5` file is required for training. This contains ND and FD reco variables from the paired data generation procedure (see `AlexWilkinsonnn/ndfd-pairs`). This `.h5` is converted into a `.csv` using the script `scripts/cut.py`. 
 
 ## Software Requirements
 wtih `pip` (also possible with conda):
 
 `pip install -r requirements.txt`
  
-## TO-dos and Issues
-
-- [ ] - Explore other generative models. Any conditional generative models should work (diffusion, normalising flows, GANs)
-
-- [ ] - Make the input and output reco vars configurables from the CLI and stored in the config file rather than just hardcoding it into `gpt/dataset.py` with a bunch of them commented out
-
-- [ ] - Try normalising variables to [0, 1]
-
-## Paired Dataset
-A paired dataset `.h5` file is required for training. This should be the ndfd reconstruction from the paired dataset simulation that has been concatenated into a single file. An example can be downloaded from [CERNBOX](https://cernbox.cern.ch/s/VL2wOEViP6QTXvv). Then use the provided script to apply cuts to the data. 
-```
-python3 scripts/cut.py --in_fname <ndfd_reco_h5_name> --out_fname <output_csv_name> /path/to/datadir/
-```
-This will create a `<output_csv_name>` csv file in `/path/to/datadir/` from the `<ndfd_reco_h5_name>` h5 file also in `/path/to/datadir/`. The csv file is used as the input file for training.
-
-## Variables 
-| Far Detector                | CVN scores           | Near Detector        | ND Reco            | Global          |
-|-----------------------------|----------------------|----------------------|--------------------|-----------------|
-| `fd_numu_nu_E`              | `fd_numu_score`      | `nuPDG`              | `Ev_reco`          | `run`           |
-| `fd_numu_had_E`             | `fd_nue_score`       | `nuMomX`             | `Elep_reoo`        | `eventID`       |
-| `fd_numu_lep_E`             | `fd_nc_score`        | `NuMomY`             | `theta_reco`       | `isCC`          |
-| `fd_numu_recomethod`        | `fd_nutau_score`     | `NuMomZ`             | `eRecoP`           | `nuPDG`         |   
-| `numu_longesttrackcontained`| `fd_antinu_score`    | `Ev`                 | `eRecoN`           | `vtxX`          |
-| `fd_numu_trackmommethod`    | `fd_proton0_score`   | `mode`               | `eRecoPip`         | `vtxY`          |
-| `fd_nue_nu_E`               | `fd_proton1_score`   | `LepPDG`             | `eRecoPim`         | `vtxZ`          |
-| `fd_nue_had_E`              | `fd_proton2_score`   | `LepMomX`            | `eRecoPi0`         |                 |
-| `fd_nue_lep_E`              | `fd_protonN_score`   | `LepMomY`            | `eRecoOther`       |                 |
-| `fd_nue_recomethod`         | `fd_pion0_score`     | `LepMomZ`            |                    |                 |
-| `fd_nc_nu_E`                | `fd_pion1_score`     | `lepE`               |                    |                 |
-| `fd_nc_had_E`               | `fd_pion2_score`     | `LepNuAngle`         |                    |                 |
-| `fd_nc_lep_E`               | `fd_pionN_score`     | `nP`                 |                    |                 |
-| `fd_nc_recomethod`          | `fd_pionzero0_score` | `nN`                 |                    |                 |
-|                             | `fd_pionzero1_score` | `nPip`               |                    |                 |
-|                             | `fd_pionzero2_score` | `nPim`               |                    |                 |
-|                             | `fd_pionzeroN_score` | `nPi0`               |                    |                 |
-|                             | `fd_neutron0_score`  | `nKp`                |                    |                 |
-|                             | `fd_neutron1_score`  | `nKm`                |                    |                 |
-|                             | `fd_neutron2_score`  | `nK0`                |                    |                 |
-|                             | `fd_neutronN_score`  | `ne`                 |                    |                 |
-|                             |                      | `nOther`             |                    |                 |
-|                             |                      | `nNucleus`           |                    |                 |
-|                             |                      | `nUNKOWN`            |                    |                 |
-|                             |                      | `eP`                 |                    |                 |
-|                             |                      | `eN`                 |                    |                 |
-|                             |                      | `ePip`               |                    |                 |
-|                             |                      | `ePim`               |                    |                 |
-|                             |                      | `ePi0`               |                    |                 |
-|                             |                      | `eOther`             |                    |                 |
-|                             |                      | `reco_numu`          |                    |                 |
-|                             |                      | `reco_nue`           |                    |                 |
-|                             |                      | `reco_nc`            |                    |                 |
-|                             |                      | `reco_q`             |                    |                 |
-|                             |                      | `muon_contained`     |                    |                 |
-|                             |                      | `muon_tracker`       |                    |                 |
-|                             |                      | `muon_ecal`          |                    |                 |
-|                             |                      | `muon_exit`          |                    |                 |
-|                             |                      | `reco_lepton_pdg`    |                    |                 |
-|                             |                      | `muon_endpntX`       |                    |                 |
-|                             |                      | `muon_endpntY`       |                    |                 |
-|                             |                      | `muon_endpntZ`       |                    |                 |
-|                             |                      | `Ehad_veto`          |                    |                 |
-|                             |                      | `muon_endVolName`    |                    |                 |
-
-
 
