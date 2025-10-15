@@ -27,7 +27,7 @@ def get_config(work_dir):
 
     # system
     C.system = CN()
-    C.system.seed = 3407
+    C.system.seed = None
     C.system.work_dir = work_dir
 
     # model
