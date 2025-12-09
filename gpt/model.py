@@ -160,7 +160,7 @@ class GPT(nn.Module):
                 'gpt2-large':   dict(n_layer=36, n_head=20, n_embd=1280), # 774M params
                 'gpt2-xl':      dict(n_layer=48, n_head=25, n_embd=1600), # 1558M params
                 # Gophers
-                'gopher-44m':   dict(n_layer=8, n_head=16, n_embd=512),
+                'gopher-small':   dict(n_layer=8, n_head=16, n_embd=512),
                 # (there are a number more...)
                 # I made these tiny models up
                 'gpt-mini':     dict(n_layer=6, n_head=6, n_embd=192),
